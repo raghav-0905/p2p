@@ -3,3 +3,5 @@ numpy
 scikit-learn
 pyarrow
 xgboost
+flask
+flask-cors

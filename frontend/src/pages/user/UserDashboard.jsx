@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { useNavigate } from "react-router-dom";
+
 import {
   AppBar,
   Toolbar,
@@ -25,8 +27,14 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import InventoryIcon from "@mui/icons-material/Inventory";
+import DescriptionIcon from "@mui/icons-material/Description";
+
 function UserDashboard() {
+
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const navigate = useNavigate();
 
   const toggleDrawer = (open) => () => {
     setDrawerOpen(open);
@@ -39,6 +47,7 @@ function UserDashboard() {
 
   return (
     <Box minHeight="100vh" bgcolor="background.default">
+
       {/* HEADER */}
       <AppBar position="static" color="primary" elevation={0}>
         <Toolbar>
@@ -57,28 +66,43 @@ function UserDashboard() {
       </AppBar>
 
       {/* SIDEBAR DRAWER */}
-      <Drawer
-        anchor="left"
-        open={drawerOpen}
-        onClose={toggleDrawer(false)}
-      >
+      <Drawer anchor="left" open={drawerOpen} onClose={toggleDrawer(false)}>
         <Box width={260} role="presentation">
-          <Typography
-            variant="h6"
-            fontWeight={700}
-            p={3}
-          >
+
+          <Typography variant="h6" fontWeight={700} p={3}>
             P2P OrgNet
           </Typography>
 
           <Divider />
 
           <List>
-            <ListItem button onClick={toggleDrawer(false)}>
+
+            <ListItem button onClick={() => navigate("/")}>
               <ListItemIcon>
                 <DashboardIcon />
               </ListItemIcon>
               <ListItemText primary="Dashboard" />
+            </ListItem>
+
+            <ListItem button onClick={() => navigate("/purchase-order")}>
+              <ListItemIcon>
+                <ReceiptLongIcon />
+              </ListItemIcon>
+              <ListItemText primary="Create Purchase Order" />
+            </ListItem>
+
+            <ListItem button onClick={() => navigate("/grn")}>
+              <ListItemIcon>
+                <InventoryIcon />
+              </ListItemIcon>
+              <ListItemText primary="Create GRN" />
+            </ListItem>
+
+            <ListItem button onClick={() => navigate("/invoice")}>
+              <ListItemIcon>
+                <DescriptionIcon />
+              </ListItemIcon>
+              <ListItemText primary="Upload Invoice" />
             </ListItem>
 
             <ListItem button onClick={toggleDrawer(false)}>
@@ -101,6 +125,7 @@ function UserDashboard() {
               </ListItemIcon>
               <ListItemText primary="Settings" />
             </ListItem>
+
           </List>
 
           <Divider />
@@ -116,52 +141,77 @@ function UserDashboard() {
               />
             </ListItem>
           </List>
+
         </Box>
       </Drawer>
 
       {/* DASHBOARD CONTENT */}
       <Box p={3}>
+
         <Grid container spacing={3}>
+
           <Grid item xs={12} md={4}>
-            <DashboardCard title="Job Orders">
-              <Typography variant="h4" fontWeight={700}>
-                71
+            <DashboardCard title="Create Purchase Order">
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={() => navigate("/purchase-order")}
+              >
+                New PO
+              </Button>
+            </DashboardCard>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <DashboardCard title="Create GRN">
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={() => navigate("/grn")}
+              >
+                New GRN
+              </Button>
+            </DashboardCard>
+          </Grid>
+
+          <Grid item xs={12} md={4}>
+            <DashboardCard title="Upload Invoice">
+              <Button
+                fullWidth
+                variant="contained"
+                onClick={() => navigate("/invoice")}
+              >
+                New Invoice
+              </Button>
+            </DashboardCard>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <DashboardCard title="PO → GRN → Invoice Matching">
+              <Typography>
+                Verify procurement documents for fraud detection and compliance.
               </Typography>
-              <Typography color="text.secondary">Past Due</Typography>
             </DashboardCard>
           </Grid>
 
-          <Grid item xs={12} md={8}>
-            <DashboardCard title="Top WIP Value Job Orders">
-              <Box height={140} bgcolor="#e5e7eb" borderRadius={2} />
+          <Grid item xs={12} md={6}>
+            <DashboardCard title="Audit Logs">
+              <Typography>
+                Track every procurement activity inside the organization.
+              </Typography>
             </DashboardCard>
           </Grid>
 
-          <Grid item xs={12} md={4}>
-            <DashboardCard title="Planned Production">
-              <Typography>MB-1000</Typography>
-              <Typography>MB-2000</Typography>
-            </DashboardCard>
-          </Grid>
-
-          <Grid item xs={12} md={4}>
-            <DashboardCard title="Production Follow-Up">
-              <Typography>🔴 48 Days Past Due</Typography>
-            </DashboardCard>
-          </Grid>
-
-          <Grid item xs={12} md={4}>
-            <DashboardCard title="Resource Utilization">
-              <Typography>Assembly: 90%</Typography>
-            </DashboardCard>
-          </Grid>
         </Grid>
+
       </Box>
+
     </Box>
   );
 }
 
-/* 🔹 Reusable Card */
+/* Reusable Card */
+
 function DashboardCard({ title, children }) {
   return (
     <Paper
@@ -174,11 +224,14 @@ function DashboardCard({ title, children }) {
     >
       <Box display="flex" justifyContent="space-between" mb={1}>
         <Typography fontWeight={600}>{title}</Typography>
+
         <IconButton size="small">
           <MoreVertIcon fontSize="small" />
         </IconButton>
       </Box>
+
       <Divider sx={{ mb: 2 }} />
+
       {children}
     </Paper>
   );

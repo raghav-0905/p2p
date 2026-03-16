@@ -7,17 +7,22 @@ import SignUp from "./pages/auth/SignUp";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import UserDashboard from "./pages/user/UserDashboard";
 
+import PurchaseOrderForm from "./pages/user/PurchaseOrderForm";
+import GRNForm from "./pages/user/GRNForm";
+import InvoiceForm from "./pages/user/InvoiceForm";
+
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
   return (
     <Routes>
-      {/* Public */}
+
+      {/* Public Routes */}
       <Route path="/" element={<Home />} />
       <Route path="/signin" element={<SignIn />} />
       <Route path="/signup" element={<SignUp />} />
 
-      {/* Admin */}
+      {/* Admin Dashboard */}
       <Route
         path="/admin"
         element={
@@ -27,7 +32,7 @@ export default function App() {
         }
       />
 
-      {/* User */}
+      {/* User Dashboard */}
       <Route
         path="/user"
         element={
@@ -36,6 +41,37 @@ export default function App() {
           </ProtectedRoute>
         }
       />
+
+      {/* Purchase Order Form */}
+      <Route
+        path="/purchase-order"
+        element={
+          <ProtectedRoute allow={["finance", "procurement"]}>
+            <PurchaseOrderForm />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* GRN Form */}
+      <Route
+        path="/grn"
+        element={
+          <ProtectedRoute allow={["finance", "procurement"]}>
+            <GRNForm />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Invoice Form */}
+      <Route
+        path="/invoice"
+        element={
+          <ProtectedRoute allow={["finance", "procurement"]}>
+            <InvoiceForm />
+          </ProtectedRoute>
+        }
+      />
+
     </Routes>
   );
 }
