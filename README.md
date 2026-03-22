@@ -1,19 +1,17 @@
-# 📦 React + Supabase Organization Dashboard (Frontend)
+# 📦 P2P OrgNet – React + Supabase Dashboard
 
-A role-based dashboard frontend built with **React + Vite**, using **Supabase Auth + PostgreSQL** for authentication and access control.
-
-This app provides a secure organization-level dashboard with role-aware routing and permissions.
+A modern **peer-to-peer organization dashboard** built with **React + Vite**, using **Supabase Auth + PostgreSQL** for secure, role-based access control.
 
 ---
 
 ## ✨ Features
 
-- Public landing page
-- Email/password authentication via Supabase
-- Role-based routing (`/admin`, `/user`)
-- Organization-level access control
+- SaaS-style landing page
+- Email/password authentication
+- Organization-based onboarding using **Organization Code**
+- Role-based dashboards (Admin / User)
 - Protected routes
-- Session-aware navigation
+- Modern ERP-style UI with Material UI
 
 ---
 
@@ -22,144 +20,131 @@ This app provides a secure organization-level dashboard with role-aware routing 
 - **React 18**
 - **Vite**
 - **React Router v6**
-- **Supabase JS SDK**
-- **PostgreSQL** (via Supabase)
+- **Material UI (MUI)**
+- **Supabase Auth**
+- **PostgreSQL (Supabase)**
 
 ---
 
 ## 🗂️ Project Structure
 
-```
 src/
 │
 ├── pages/
-│   ├── Home.jsx
-│   ├── auth/
-│   │   ├── SignIn.jsx
-│   │   └── SignUp.jsx
-│   ├── admin/
-│   │   └── AdminDashboard.jsx
-│   └── user/
-│       └── UserDashboard.jsx
+│ ├── Home.jsx
+│ ├── auth/
+│ │ ├── SignIn.jsx
+│ │ └── SignUp.jsx
+│ ├── admin/
+│ │ └── AdminDashboard.jsx
+│ └── user/
+│ └── UserDashboard.jsx
 │
 ├── components/
-│   └── ProtectedRoute.jsx
+│ └── ProtectedRoute.jsx
 │
 ├── context/
-│   └── AuthContext.jsx
+│ └── AuthContext.jsx
 │
 ├── lib/
-│   └── supabase.js
+│ └── supabase.js
+│
+├── theme/
+│ └── theme.js
 │
 ├── App.jsx
 ├── main.jsx
 └── index.css
-```
+---
+
 
 ---
 
-## 🔐 Authentication & Authorization Model
+## 🔐 Authentication & Authorization
 
 ### Authentication
-
-Handled by **Supabase Auth** using email/password login.
-
----
+Handled via **Supabase Auth** (email/password).
 
 ### Authorization
-
-Access control is managed through a custom database table:
-
-#### `organization_users`
-
-| Column   | Description |
-|----------|-------------|
-| user_id  | Supabase auth user ID |
-| org_id   | Organization UUID |
-| role     | `org_admin`, `finance`, `procurement`, `viewer` |
-| status   | `active`, `invited`, `suspended` |
+Managed using organization-based mapping.
 
 ---
 
-### Role-Based Routing
+## 🏢 Database Model (Supabase)
+
+### `organizations`
+
+| Column | Description |
+|------|-------------|
+| id | Organization UUID |
+| legal_name | Legal entity name |
+| trade_name | Optional display name |
+| org_code | **Admin-defined unique join code** |
+| is_active | Organization status |
+
+> `org_code` is manually created by admins and used during signup.
+
+---
+
+### `organization_users`
+
+| Column | Description |
+|------|-------------|
+| user_id | Supabase auth user ID |
+| org_id | Organization UUID |
+| role | `org_admin`, `finance`, `procurement`, `viewer` |
+| status | `active`, `invited`, `suspended` |
+
+---
+
+## 📝 Signup Flow (Important)
+
+1. User enters **Organization Code**
+2. Code is validated against `organizations.org_code`
+3. User account is created via Supabase Auth
+4. Entry added to `organization_users`
+5. User is redirected to **Sign In**
+
+> No auto-generation of org codes — fully admin controlled.
+
+---
+
+## 🛂 Role-Based Routing
 
 | Role | Route |
-|------|-------|
+|----|------|
 | `org_admin` | `/admin` |
-| All other active roles | `/user` |
+| `finance`, `procurement`, `viewer` | `/user` |
 
-Navigation occurs immediately after login — no redirect logic exists on `/`.
+Routing is enforced using `ProtectedRoute`.
 
 ---
 
 ## 🌐 Routes
 
 | Route | Access |
-|-------|--------|
+|------|--------|
 | `/` | Public landing page |
 | `/signin` | Public |
 | `/signup` | Public |
-| `/admin` | org_admin only |
-| `/user` | Non-admin active roles |
+| `/admin` | Admin only |
+| `/user` | Active non-admin users |
+
+---
+
+## 🔒 Supabase RLS Policies (Required)
+
+- Allow reading organizations (for org code validation)
+- Allow users to insert **only their own** row into `organization_users`
 
 ---
 
 ## 📦 Installation
 
-Clone the repository:
-
 ```bash
-git clone <your-repo-url>
-cd <repo-name>
-```
-
-Install dependencies:
-
-```bash
+git clone <repo-url>
+cd <project-folder>
 npm install
-```
-
----
-
-### Main Dependencies
-
-```bash
-npm install react react-dom
-npm install react-router-dom
-npm install @supabase/supabase-js
-```
-
----
-
-### Dev Dependencies (via Vite)
-
-```bash
-npm install -D vite
-```
-
----
-
-## ▶ Running the App
-
-Start the development server:
-
-```bash
-npm run dev
-```
-
-Build for production:
-
-```bash
-npm run build
-```
-
-Preview production build:
-
-```bash
-npm run preview
-```
-
----
 
 ## ⚙️ Environment Setup
 
@@ -184,16 +169,7 @@ Unauthorized users are redirected automatically.
 
 ---
 
-## 🚀 Future Enhancements
 
-- Multi-organization switching
-- Role management UI
-- Admin invite system
-- Audit logging
-- Permission granularity
-- Dashboard analytics
-
----
 
 ## 📄 License
 
