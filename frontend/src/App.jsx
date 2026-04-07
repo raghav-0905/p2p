@@ -11,6 +11,9 @@ import PurchaseOrderForm from "./pages/user/PurchaseOrderForm";
 import GRNForm from "./pages/user/GRNForm";
 import InvoiceForm from "./pages/user/InvoiceForm";
 
+import AnalyticsDashboard from "./pages/user/AnalyticsDashboard";
+import ProcurementOverview from "./pages/user/ProcurementOverview";
+
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
@@ -68,6 +71,26 @@ export default function App() {
         element={
           <ProtectedRoute allow={["finance", "procurement"]}>
             <InvoiceForm />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Analytics Dashboard */}
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute allow={["finance", "procurement", "viewer"]}>
+            <AnalyticsDashboard />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Procurement Overview */}
+      <Route
+        path="/procurement"
+        element={
+          <ProtectedRoute allow={["finance", "procurement", "viewer"]}>
+            <ProcurementOverview />
           </ProtectedRoute>
         }
       />
