@@ -12,6 +12,7 @@ import GRNForm from "./pages/user/GRNForm";
 
 import AnalyticsDashboard from "./pages/user/AnalyticsDashboard";
 import ProcurementOverview from "./pages/user/ProcurementOverview";
+import InvoiceReview from "./pages/user/InvoiceReview";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -80,6 +81,16 @@ export default function App() {
         element={
           <ProtectedRoute allow={["finance", "procurement", "viewer"]}>
             <ProcurementOverview />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Invoice Review */}
+      <Route
+        path="/invoice"
+        element={
+          <ProtectedRoute allow={["finance", "procurement"]}>
+            <InvoiceReview />
           </ProtectedRoute>
         }
       />

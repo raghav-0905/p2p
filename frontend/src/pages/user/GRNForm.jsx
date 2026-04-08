@@ -51,7 +51,7 @@ function GRNForm() {
         .from("purchase_orders")
         .select("id, po_number, status")
         .eq("org_id", orgData.org_id)
-        .in("status", ["created", "approved"]);
+        .in("status", ["acknowledged", "partially_received"]);
       setPurchaseOrders(data || []);
     };
     fetchPOs();
@@ -80,20 +80,41 @@ function GRNForm() {
           name: item.item_name_snapshot,
           ordered_qty: Number(item.quantity || 0),
           received_qty: Number(item.quantity || 0),
+          accepted_qty: Number(item.quantity || 0),
+          rejected_qty: 0,
           rate: Number(item.unit_price || 0),
         }));
         setReceivedItems(rows);
       });
   };
 
-  const handleReceivedQty = (id, value) => {
+  const handleItemQtyChange = (id, field, value) => {
     setReceivedItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, received_qty: Number(value || 0) } : item))
+      prev.map((item) => {
+        if (item.id === id) {
+          const val = Number(value || 0);
+          return { ...item, [field]: val };
+        }
+        return item;
+      })
     );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validation
+    for (let item of receivedItems) {
+      if (item.received_qty !== item.accepted_qty + item.rejected_qty) {
+        setToast({ 
+          open: true, 
+          msg: `Quantities mismatch for ${item.name}. Received (${item.received_qty}) must equal Accepted (${item.accepted_qty}) + Rejected (${item.rejected_qty}).`, 
+          severity: "error" 
+        });
+        return;
+      }
+    }
+
     setLoading(true);
 
     const user = (await supabase.auth.getUser()).data.user;
@@ -118,16 +139,19 @@ function GRNForm() {
         grn_id: createdGrn.id,
         po_item_id: item.id,
         item_name_snapshot: item.name,
-        quantity_received: Number(item.received_qty || 0),
-        quantity_accepted: Number(item.received_qty || 0),
-        quantity_rejected: 0,
+        quantity_received: item.received_qty,
+        quantity_accepted: item.accepted_qty,
+        quantity_rejected: item.rejected_qty,
       }));
       await supabase.from("grn_items").insert(grnItemPayload);
 
-      // Keep PO approved until invoice/payment closure
+      const isPartiallyReceived = receivedItems.some(i => i.received_qty < i.ordered_qty);
+      const newStatus = isPartiallyReceived ? "partially_received" : "fully_received";
+
+      // Update PO status based on new workflow
       await supabase
         .from("purchase_orders")
-        .update({ status: "approved" })
+        .update({ status: newStatus })
         .eq("id", selectedPO.id);
     }
 
@@ -215,8 +239,10 @@ function GRNForm() {
                     <TableHead>
                       <TableRow>
                         <TableCell>Item</TableCell>
-                        <TableCell>Ordered Qty</TableCell>
+                        <TableCell>Ordered</TableCell>
                         <TableCell>Received Qty</TableCell>
+                        <TableCell>Accepted Qty</TableCell>
+                        <TableCell>Rejected Qty</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -228,9 +254,27 @@ function GRNForm() {
                             <TextField
                               size="small"
                               type="number"
-                              inputProps={{ min: 0, max: item.ordered_qty }}
+                              inputProps={{ min: 0 }}
                               value={item.received_qty}
-                              onChange={(e) => handleReceivedQty(item.id, e.target.value)}
+                              onChange={(e) => handleItemQtyChange(item.id, "received_qty", e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              type="number"
+                              inputProps={{ min: 0 }}
+                              value={item.accepted_qty}
+                              onChange={(e) => handleItemQtyChange(item.id, "accepted_qty", e.target.value)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              type="number"
+                              inputProps={{ min: 0 }}
+                              value={item.rejected_qty}
+                              onChange={(e) => handleItemQtyChange(item.id, "rejected_qty", e.target.value)}
                             />
                           </TableCell>
                         </TableRow>

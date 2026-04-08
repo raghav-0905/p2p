@@ -301,6 +301,33 @@ export async function enrichInvoicesWithOrganizations(invoices) {
 }
 
 /**
+ * Attach purchase_orders.po_number to each invoice for table display.
+ */
+export async function enrichInvoicesWithPONumbers(invoices) {
+  const ids = [
+    ...new Set((invoices || []).map((i) => i.po_id).filter(Boolean)),
+  ];
+  if (ids.length === 0) {
+    return (invoices || []).map((i) => ({ ...i, po_number: null }));
+  }
+
+  const { data: pos, error } = await supabase
+    .from("purchase_orders")
+    .select("id, po_number")
+    .in("id", ids);
+
+  if (error) {
+    console.warn("[vendor-frontend] purchase_orders (enrich inv):", error.message);
+  }
+
+  const map = Object.fromEntries((pos || []).map((p) => [p.id, p]));
+  return (invoices || []).map((i) => ({
+    ...i,
+    po_number: i.po_id && map[i.po_id] ? map[i.po_id].po_number : null,
+  }));
+}
+
+/**
  * Connect a vendor to an additional org via the bridge table.
  */
 export async function connectVendorToOrg(vendorId, orgId) {
@@ -314,5 +341,23 @@ export async function connectVendorToOrg(vendorId, orgId) {
   if (error) {
     console.error("[vendor-frontend] connectVendorToOrg:", error.message, error);
   }
+  return { error };
+}
+export async function updatePOStatus(poId, newStatus) {
+  const updates = { status: newStatus };
+
+  if (newStatus === "acknowledged") {
+    updates.acknowledged_at = new Date().toISOString();
+  }
+
+  if (newStatus === "closed") {
+    updates.closed_at = new Date().toISOString();
+  }
+
+  const { error } = await supabase
+    .from("purchase_orders")
+    .update(updates)
+    .eq("id", poId);
+
   return { error };
 }
