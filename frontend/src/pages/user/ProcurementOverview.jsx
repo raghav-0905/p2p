@@ -21,8 +21,18 @@ export default function ProcurementOverview() {
   const [pos, setPOs] = useState([]);
   const [grns, setGRNs] = useState([]);
   const [invoices, setInvoices] = useState([]);
+  const [dispatchMap, setDispatchMap] = useState({});
 
   useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    const ch = supabase
+      .channel("procurement-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "purchase_orders" }, fetchAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "invoices" }, fetchAll)
+      .on("postgres_changes", { event: "*", schema: "public", table: "grns" }, fetchAll)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
 
   async function fetchAll() {
     setLoading(true);
@@ -42,12 +52,30 @@ export default function ProcurementOverview() {
       if (poRes.data) setPOs(poRes.data);
       if (grnRes.data) setGRNs(grnRes.data);
       if (invRes.data) setInvoices(invRes.data);
+
+      const { data: dispatchLogs } = await supabase
+        .from("audit_logs")
+        .select("entity_id, performed_at, metadata")
+        .eq("org_id", orgId)
+        .eq("entity_type", "purchase_order")
+        .eq("action", "dispatch_update")
+        .order("performed_at", { ascending: false });
+      const map = {};
+      (dispatchLogs || []).forEach((d) => {
+        if (!map[d.entity_id]) map[d.entity_id] = d;
+      });
+      setDispatchMap(map);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
   }
+
+  const updateInvoiceStatus = async (id, status) => {
+    await supabase.from("invoices").update({ status }).eq("id", id);
+    fetchAll();
+  };
 
   return (
     <Box minHeight="100vh" bgcolor="#f8fafc">
@@ -106,6 +134,7 @@ export default function ProcurementOverview() {
                           <TableCell sx={{ fontWeight: 700 }}>GSTIN</TableCell>
                           <TableCell sx={{ fontWeight: 700 }}>Total Amount</TableCell>
                           <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Dispatch Update</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -117,6 +146,11 @@ export default function ProcurementOverview() {
                             <TableCell>{po.supplier_gstin || "—"}</TableCell>
                             <TableCell>₹{Number(po.total_amount || 0).toLocaleString("en-IN")}</TableCell>
                             <TableCell><Chip size="small" label={po.status} color={STATUS_COLORS[po.status] || "default"} /></TableCell>
+                            <TableCell>
+                              {dispatchMap[po.id]
+                                ? `Tracking: ${dispatchMap[po.id]?.metadata?.tracking_id || "updated"}`
+                                : "—"}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -170,6 +204,7 @@ export default function ProcurementOverview() {
                           <TableCell sx={{ fontWeight: 700 }}>GSTIN</TableCell>
                           <TableCell sx={{ fontWeight: 700 }}>Total Amount</TableCell>
                           <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Action</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -181,6 +216,14 @@ export default function ProcurementOverview() {
                             <TableCell>{inv.supplier_gstin || "—"}</TableCell>
                             <TableCell>₹{Number(inv.total_amount || 0).toLocaleString("en-IN")}</TableCell>
                             <TableCell><Chip size="small" label={inv.status} color={STATUS_COLORS[inv.status] || "default"} /></TableCell>
+                            <TableCell>
+                              {inv.status === "submitted" ? (
+                                <Box display="flex" gap={1}>
+                                  <Chip label="Accept" color="success" size="small" onClick={() => updateInvoiceStatus(inv.id, "matched")} />
+                                  <Chip label="Reject" color="error" size="small" onClick={() => updateInvoiceStatus(inv.id, "rejected")} />
+                                </Box>
+                              ) : "—"}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

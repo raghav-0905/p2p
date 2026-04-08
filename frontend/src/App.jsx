@@ -9,7 +9,6 @@ import UserDashboard from "./pages/user/UserDashboard";
 
 import PurchaseOrderForm from "./pages/user/PurchaseOrderForm";
 import GRNForm from "./pages/user/GRNForm";
-import InvoiceForm from "./pages/user/InvoiceForm";
 
 import AnalyticsDashboard from "./pages/user/AnalyticsDashboard";
 import ProcurementOverview from "./pages/user/ProcurementOverview";
@@ -61,16 +60,6 @@ export default function App() {
         element={
           <ProtectedRoute allow={["finance", "procurement"]}>
             <GRNForm />
-          </ProtectedRoute>
-        }
-      />
-
-      {/* Invoice Form */}
-      <Route
-        path="/invoice"
-        element={
-          <ProtectedRoute allow={["finance", "procurement"]}>
-            <InvoiceForm />
           </ProtectedRoute>
         }
       />

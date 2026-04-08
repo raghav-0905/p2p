@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import {
@@ -13,6 +13,13 @@ import {
   Snackbar,
   Alert,
   Divider,
+  MenuItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import InventoryIcon from "@mui/icons-material/Inventory";
@@ -21,10 +28,69 @@ import { motion } from "framer-motion";
 function GRNForm() {
   const navigate = useNavigate();
   const [poId, setPoId] = useState("");
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [selectedPO, setSelectedPO] = useState(null);
+  const [receivedItems, setReceivedItems] = useState([]);
   const [grnNumber, setGrnNumber] = useState("");
   const [grnDate, setGrnDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, msg: "", severity: "success" });
+
+  useEffect(() => {
+    const fetchPOs = async () => {
+      const user = (await supabase.auth.getUser()).data.user;
+      if (!user) return;
+      const { data: orgData } = await supabase
+        .from("organization_users")
+        .select("org_id")
+        .eq("user_id", user.id)
+        .single();
+      if (!orgData?.org_id) return;
+
+      const { data } = await supabase
+        .from("purchase_orders")
+        .select("id, po_number, status")
+        .eq("org_id", orgData.org_id)
+        .in("status", ["created", "approved"]);
+      setPurchaseOrders(data || []);
+    };
+    fetchPOs();
+  }, []);
+
+  const totalReceivedQty = useMemo(
+    () => receivedItems.reduce((sum, i) => sum + Number(i.received_qty || 0), 0),
+    [receivedItems]
+  );
+
+  const handlePoSelect = (value) => {
+    setPoId(value);
+    const po = purchaseOrders.find((p) => p.po_number === value) || null;
+    setSelectedPO(po);
+    if (!po?.id) {
+      setReceivedItems([]);
+      return;
+    }
+    supabase
+      .from("purchase_order_items")
+      .select("id, item_name_snapshot, quantity, unit_price")
+      .eq("po_id", po.id)
+      .then(({ data }) => {
+        const rows = (data || []).map((item) => ({
+          id: item.id,
+          name: item.item_name_snapshot,
+          ordered_qty: Number(item.quantity || 0),
+          received_qty: Number(item.quantity || 0),
+          rate: Number(item.unit_price || 0),
+        }));
+        setReceivedItems(rows);
+      });
+  };
+
+  const handleReceivedQty = (id, value) => {
+    setReceivedItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, received_qty: Number(value || 0) } : item))
+    );
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,15 +103,33 @@ function GRNForm() {
       .eq("user_id", user.id)
       .single();
 
-    const { error } = await supabase.from("grns").insert([
+    const { data: createdGrn, error } = await supabase.from("grns").insert([
       {
         org_id: orgData.org_id,
-        po_id: poId,
+        po_id: selectedPO?.id,
         grn_number: grnNumber,
         grn_date: grnDate,
         received_by: user.id,
       },
-    ]);
+    ]).select("id").single();
+
+    if (!error && createdGrn?.id) {
+      const grnItemPayload = receivedItems.map((item) => ({
+        grn_id: createdGrn.id,
+        po_item_id: item.id,
+        item_name_snapshot: item.name,
+        quantity_received: Number(item.received_qty || 0),
+        quantity_accepted: Number(item.received_qty || 0),
+        quantity_rejected: 0,
+      }));
+      await supabase.from("grn_items").insert(grnItemPayload);
+
+      // Keep PO approved until invoice/payment closure
+      await supabase
+        .from("purchase_orders")
+        .update({ status: "approved" })
+        .eq("id", selectedPO.id);
+    }
 
     setLoading(false);
     if (error) {
@@ -104,9 +188,58 @@ function GRNForm() {
           <Divider sx={{ my: 3 }} />
 
           <Box component="form" onSubmit={handleSubmit}>
-            <TextField fullWidth label="Purchase Order ID" margin="normal" required value={poId} onChange={(e) => setPoId(e.target.value)} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
+            <TextField
+              select
+              fullWidth
+              label="Select PO Number"
+              margin="normal"
+              required
+              value={poId}
+              onChange={(e) => handlePoSelect(e.target.value)}
+              sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+            >
+              {purchaseOrders.map((po) => (
+                <MenuItem key={po.id} value={po.po_number}>
+                  {po.po_number} ({po.status})
+                </MenuItem>
+              ))}
+            </TextField>
             <TextField fullWidth label="GRN Number" margin="normal" required value={grnNumber} onChange={(e) => setGrnNumber(e.target.value)} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
             <TextField fullWidth type="date" label="GRN Date" margin="normal" required InputLabelProps={{ shrink: true }} value={grnDate} onChange={(e) => setGrnDate(e.target.value)} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
+
+            {selectedPO && (
+              <Box mt={2}>
+                <Typography fontWeight={700} mb={1}>Items Shipped for {selectedPO.po_number}</Typography>
+                <TableContainer component={Paper} elevation={0} sx={{ border: "1px solid", borderColor: "divider" }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Item</TableCell>
+                        <TableCell>Ordered Qty</TableCell>
+                        <TableCell>Received Qty</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {receivedItems.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell>{item.name}</TableCell>
+                          <TableCell>{item.ordered_qty}</TableCell>
+                          <TableCell>
+                            <TextField
+                              size="small"
+                              type="number"
+                              inputProps={{ min: 0, max: item.ordered_qty }}
+                              value={item.received_qty}
+                              onChange={(e) => handleReceivedQty(item.id, e.target.value)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
 
             <Button
               type="submit"
