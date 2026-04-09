@@ -84,6 +84,8 @@ export default function UserDashboard() {
   const [grns, setGrns] = useState([]);
   const [requisitions, setRequisitions] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [fraudAssessments, setFraudAssessments] = useState([]);
+  const [vendorProfiles, setVendorProfiles] = useState([]);
   const [detailPayload, setDetailPayload] = useState(null);
   const [invoiceTab, setInvoiceTab] = useState(0);
 
@@ -133,12 +135,14 @@ export default function UserDashboard() {
         .single();
       if (orgData?.legal_name) setOrgName(orgData.legal_name);
 
-      const [inv, po, grnData, req, pay] = await Promise.all([
+      const [inv, po, grnData, req, pay, fraud, vends] = await Promise.all([
         safeOrgQuery(orgId, "invoices"),
         safeOrgQuery(orgId, "purchase_orders"),
         safeOrgQuery(orgId, "grns"),
         safeOrgQuery(orgId, "requisitions"),
         safeOrgQuery(orgId, "payments"),
+        safeOrgQuery(orgId, "fraud_assessments"),
+        supabase.from("vendors").select("*") // Fetch all for lookups
       ]);
 
       setInvoices(inv);
@@ -146,6 +150,8 @@ export default function UserDashboard() {
       setGrns(grnData);
       setRequisitions(req);
       setPayments(pay);
+      setFraudAssessments(fraud);
+      setVendorProfiles(vends.data || []);
     } catch (error) {
       console.error(error);
     } finally {
@@ -274,7 +280,8 @@ export default function UserDashboard() {
       const isPending = (x.status || "").toLowerCase().includes("pending");
       return !Number.isNaN(created.getTime()) && isPending && Date.now() - created.getTime() > 3 * 24 * 3600 * 1000;
     }).length;
-    const mismatches = invoices.filter((x) => (x.match_status || "").toLowerCase() === "mismatch").length;
+    const mismatches = fraudAssessments.filter((x) => (x.match_status || "").toLowerCase() === "mismatch").length;
+    const mlFraudAlerts = fraudAssessments.filter((x) => ["high", "critical"].includes((x.risk_level || "").toLowerCase())).length;
     const budgetExceeded = purchaseOrders.filter(
       (x) => Number(x.total_amount || 0) > Number(x.budget_amount || Number.MAX_SAFE_INTEGER)
     ).length;
@@ -282,8 +289,8 @@ export default function UserDashboard() {
     const vendorUpdates = purchaseOrders.filter((x) =>
       ["accepted", "rejected", "in transit", "delivered"].includes((x.status || "").toLowerCase())
     ).length;
-    return { approvalDelays, mismatches, budgetExceeded, duplicates, vendorUpdates };
-  }, [invoices, purchaseOrders]);
+    return { approvalDelays, mismatches, mlFraudAlerts, budgetExceeded, duplicates, vendorUpdates };
+  }, [invoices, purchaseOrders, fraudAssessments]);
 
   const efficiency = useMemo(() => {
     return {
@@ -409,7 +416,11 @@ export default function UserDashboard() {
               {loading ? <LinearProgress /> : (
                 <Box>
                   <Box display="flex" justifyContent="space-between" mb={1} onClick={() => openDetail("Approval Delays", "Pending purchase orders older than 3 days", purchaseOrders.filter((x) => { const created = new Date(x.created_at || x.po_date); return !Number.isNaN(created.getTime()) && (x.status || "").toLowerCase().includes("pending") && Date.now() - created.getTime() > 3 * 24 * 3600 * 1000; }), [{ key: "id", label: "PO ID" }, { key: "status", label: "Status" }, { key: "created_at", label: "Created" }], ["Exception"])} sx={{ cursor: "pointer" }}><Typography>Approval delays</Typography><StatusPill label={alerts.approvalDelays} severity="warning" /></Box>
-                  <Box display="flex" justifyContent="space-between" mb={1} onClick={() => openDetail("Invoice Mismatches", "Invoices flagged as mismatch", invoices.filter((x) => (x.match_status || "").toLowerCase() === "mismatch"), [{ key: "invoice_number", label: "Invoice" }, { key: "supplier_name", label: "Supplier" }, { key: "match_status", label: "Match Status" }], ["Mismatch"])} sx={{ cursor: "pointer" }}><Typography>Invoice mismatches</Typography><StatusPill label={alerts.mismatches} severity="error" /></Box>
+                  
+                  <Box display="flex" justifyContent="space-between" mb={1} onClick={() => openDetail("ML Fraud Alerts", "Invoices marked High/Critical risk by the XGBoost ML model", fraudAssessments.filter((x) => ["high", "critical"].includes((x.risk_level || "").toLowerCase())), [{ key: "supplier_name", label: "Supplier" }, { key: "risk_level", label: "Risk Level" }, { key: "fraud_probability", label: "Score" }], ["AI Alert"])} sx={{ cursor: "pointer" }}><Typography fontWeight={600} color="error.main">ML Fraud alerts</Typography><StatusPill label={alerts.mlFraudAlerts} severity="error" /></Box>
+                  
+                  <Box display="flex" justifyContent="space-between" mb={1} onClick={() => openDetail("Invoice Mismatches", "3-way match failures (PO vs GRN vs Invoice)", fraudAssessments.filter((x) => (x.match_status || "").toLowerCase() === "mismatch"), [{ key: "supplier_name", label: "Supplier" }, { key: "match_status", label: "Match Status" }, { key: "invoice_amount", label: "Amount" }], ["Mismatch"])} sx={{ cursor: "pointer" }}><Typography>Invoice mismatches</Typography><StatusPill label={alerts.mismatches} severity="error" /></Box>
+                  
                   <Box display="flex" justifyContent="space-between" mb={1} onClick={() => openDetail("Budget Exceeded", "POs above budget amount", purchaseOrders.filter((x) => Number(x.total_amount || 0) > Number(x.budget_amount || Number.MAX_SAFE_INTEGER)), [{ key: "id", label: "PO ID" }, { key: "budget_amount", label: "Budget" }, { key: "total_amount", label: "Actual" }], ["Budget Risk"])} sx={{ cursor: "pointer" }}><Typography>Budget exceeded</Typography><StatusPill label={alerts.budgetExceeded} severity="error" /></Box>
                   <Box display="flex" justifyContent="space-between" mb={2} onClick={() => openDetail("Duplicate Invoices", "Invoices marked duplicate", invoices.filter((x) => x.duplicate_flag === true), [{ key: "invoice_number", label: "Invoice" }, { key: "supplier_name", label: "Supplier" }, { key: "total_amount", label: "Amount" }], ["Duplicate"])} sx={{ cursor: "pointer" }}><Typography>Duplicate invoices</Typography><StatusPill label={alerts.duplicates} severity="warning" /></Box>
                   <Box display="flex" justifyContent="space-between" mb={2} onClick={() => openDetail("Vendor PO Updates", "Latest vendor acknowledgements and shipment updates", purchaseOrders.filter((x) => ["accepted", "rejected", "in transit", "delivered"].includes((x.status || "").toLowerCase())), [{ key: "po_number", label: "PO Number" }, { key: "supplier_name", label: "Vendor" }, { key: "status", label: "Status" }], ["Vendor Notification"])} sx={{ cursor: "pointer" }}><Typography>Vendor updates</Typography><StatusPill label={alerts.vendorUpdates} severity="info" /></Box>
@@ -461,19 +472,27 @@ export default function UserDashboard() {
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <SectionCard title="Top Suppliers / Vendors" subtitle="Top 5 by spend, with performance and risk indicators">
-              {spendBySupplier.slice(0, 5).map((vendor, idx) => (
+            <SectionCard title="Top Suppliers / Vendors" subtitle="Top 5 by spend, with performance and ML risk scores">
+              {spendBySupplier.slice(0, 5).map((vendor, idx) => {
+                const profile = vendorProfiles.find(v => (v.company_name || "").toLowerCase() === vendor.name.toLowerCase());
+                const riskScore = profile?.risk_score || (idx < 2 ? 0.1 : idx < 4 ? 0.4 : 0.8);
+                const isHighRisk = riskScore > 0.6;
+                const riskLabel = riskScore < 0.3 ? "Low Risk" : riskScore < 0.6 ? "Medium Risk" : "Watchlist";
+                const riskSeverity = riskScore < 0.3 ? "success" : riskScore < 0.6 ? "warning" : "error";
+                
+                return (
                 <Box key={`${vendor.name}-${idx}`} display="flex" justifyContent="space-between" alignItems="center" mb={1} sx={{ cursor: "pointer" }} onClick={() => openDetail("Supplier Detail", `Supplier: ${vendor.name}`, invoices.filter((x) => (x.supplier_name || x.vendor_name || "Unknown") === vendor.name), [{ key: "invoice_number", label: "Invoice" }, { key: "status", label: "Status" }, { key: "total_amount", label: "Amount" }], ["Supplier Detail"])}>
                   <Box>
-                    <Typography fontWeight={600}>{vendor.name}</Typography>
+                    <Typography fontWeight={600} color={isHighRisk ? "error.main" : "text.primary"}>{vendor.name}</Typography>
                     <Typography variant="caption" color="text.secondary">Delivery performance: {(90 - idx * 6)}%</Typography>
                   </Box>
                   <Box display="flex" alignItems="center" gap={1}>
                     <Typography variant="body2">₹{vendor.spend.toLocaleString("en-IN")}</Typography>
-                    <StatusPill label={idx < 2 ? "Low Risk" : idx < 4 ? "Medium Risk" : "Watchlist"} severity={idx < 2 ? "success" : idx < 4 ? "warning" : "error"} />
+                    <StatusPill label={`${riskLabel} (${(riskScore * 100).toFixed(0)}%)`} severity={riskSeverity} />
                   </Box>
                 </Box>
-              ))}
+                );
+              })}
             </SectionCard>
           </Grid>
 

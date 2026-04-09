@@ -5,3 +5,4 @@ pyarrow
 xgboost
 flask
 flask-cors
+shap

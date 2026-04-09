@@ -60,16 +60,26 @@ def predict():
         df.drop(columns=["supplier_id"], inplace = True)
 
         # =========================
-        # PREDICT
+        # SHAP FEATURE CONTRIBUTIONS
         # =========================
+        
+        # We use shap.TreeExplainer for xgboost models
+        import shap
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(df)
 
         prob = model.predict_proba(df)[0][1]
-
         prediction = int(prob > 0.5)
+        
+        # Prepare feature contributions dictionary
+        feature_contributions = {}
+        for i, col in enumerate(df.columns):
+            feature_contributions[col] = float(shap_values[0][i])
 
         return jsonify({
             "fraud_probability": float(prob),
-            "is_fraud": prediction
+            "is_fraud": prediction,
+            "feature_contributions": feature_contributions
         })
 
     except Exception as e:

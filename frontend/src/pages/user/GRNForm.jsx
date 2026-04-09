@@ -30,6 +30,8 @@ function GRNForm() {
   const [poId, setPoId] = useState("");
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [selectedPO, setSelectedPO] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState("");
   const [receivedItems, setReceivedItems] = useState([]);
   const [grnNumber, setGrnNumber] = useState("");
   const [grnDate, setGrnDate] = useState("");
@@ -62,30 +64,51 @@ function GRNForm() {
     [receivedItems]
   );
 
-  const handlePoSelect = (value) => {
+  const handlePoSelect = async (value) => {
     setPoId(value);
+    setSelectedInvoiceId("");
+    setInvoices([]);
     const po = purchaseOrders.find((p) => p.po_number === value) || null;
     setSelectedPO(po);
     if (!po?.id) {
       setReceivedItems([]);
       return;
     }
-    supabase
-      .from("purchase_order_items")
-      .select("id, item_name_snapshot, quantity, unit_price")
-      .eq("po_id", po.id)
-      .then(({ data }) => {
-        const rows = (data || []).map((item) => ({
-          id: item.id,
-          name: item.item_name_snapshot,
-          ordered_qty: Number(item.quantity || 0),
-          received_qty: Number(item.quantity || 0),
-          accepted_qty: Number(item.quantity || 0),
-          rejected_qty: 0,
-          rate: Number(item.unit_price || 0),
-        }));
-        setReceivedItems(rows);
-      });
+    
+    // Fetch associated invoices for this PO
+    const { data: invData } = await supabase
+      .from("invoices")
+      .select("id, invoice_number, status")
+      .eq("po_id", po.id);
+    setInvoices(invData || []);
+  };
+
+  const handleInvoiceSelect = async (invoiceId) => {
+    setSelectedInvoiceId(invoiceId);
+    if (!invoiceId) {
+      setReceivedItems([]);
+      return;
+    }
+
+    // Fetch Invoice Items (which tell us the quantity the vendor billed and link back to the PO item)
+    const { data: invItems } = await supabase
+      .from("invoice_items")
+      .select("id, po_item_id, item_name_snapshot, quantity, unit_price")
+      .eq("invoice_id", invoiceId);
+
+    const rows = (invItems || []).map((invItem) => {
+      return {
+        id: invItem.po_item_id, // Safely use the natively linked PO Item ID
+        name: invItem.item_name_snapshot,
+        ordered_qty: Number(invItem.quantity || 0), // Now reflects invoiced quantity
+        received_qty: Number(invItem.quantity || 0),
+        accepted_qty: Number(invItem.quantity || 0),
+        rejected_qty: 0,
+        rate: Number(invItem.unit_price || 0),
+      };
+    }).filter(r => r.id); // Ensure we only show items that have a PO link
+
+    setReceivedItems(rows);
   };
 
   const handleItemQtyChange = (id, field, value) => {
@@ -93,7 +116,14 @@ function GRNForm() {
       prev.map((item) => {
         if (item.id === id) {
           const val = Number(value || 0);
-          return { ...item, [field]: val };
+          const updatedItem = { ...item, [field]: val };
+          
+          // Auto-calculate rejected quantity
+          if (field === "received_qty" || field === "accepted_qty") {
+            updatedItem.rejected_qty = Math.max(0, updatedItem.received_qty - updatedItem.accepted_qty);
+          }
+          
+          return updatedItem;
         }
         return item;
       })
@@ -105,10 +135,10 @@ function GRNForm() {
 
     // Validation
     for (let item of receivedItems) {
-      if (item.received_qty !== item.accepted_qty + item.rejected_qty) {
+      if (item.accepted_qty > item.received_qty) {
         setToast({ 
           open: true, 
-          msg: `Quantities mismatch for ${item.name}. Received (${item.received_qty}) must equal Accepted (${item.accepted_qty}) + Rejected (${item.rejected_qty}).`, 
+          msg: `Cannot accept more than received for ${item.name} (Received: ${item.received_qty}, Accepted: ${item.accepted_qty}).`, 
           severity: "error" 
         });
         return;
@@ -128,6 +158,7 @@ function GRNForm() {
       {
         org_id: orgData.org_id,
         po_id: selectedPO?.id,
+        invoice_id: selectedInvoiceId,
         grn_number: grnNumber,
         grn_date: grnDate,
         received_by: user.id,
@@ -143,16 +174,56 @@ function GRNForm() {
         quantity_accepted: item.accepted_qty,
         quantity_rejected: item.rejected_qty,
       }));
-      await supabase.from("grn_items").insert(grnItemPayload);
+      
+      const { error: itemInsertError } = await supabase.from("grn_items").insert(grnItemPayload);
+      if (itemInsertError) {
+         console.error("Failed to insert GRN items:", itemInsertError);
+         setToast({ open: true, msg: "Warning: Failed to insert GRN items.", severity: "error" });
+      }
 
-      const isPartiallyReceived = receivedItems.some(i => i.received_qty < i.ordered_qty);
-      const newStatus = isPartiallyReceived ? "partially_received" : "fully_received";
+      // Calculate accurate PO fulfillment across previously added GRNs
+      const { data: allGrns } = await supabase.from("grns").select("id").eq("po_id", selectedPO.id);
+      const grnIds = allGrns?.map(g => g.id) || [];
+      
+      const { data: allGrnItems } = await supabase.from("grn_items").select("po_item_id, quantity_accepted").in("grn_id", grnIds);
+      const { data: poItems } = await supabase.from("purchase_order_items").select("id, quantity").eq("po_id", selectedPO.id);
+      
+      let isFullyReceived = true;
+      for (const poItem of poItems || []) {
+         const totalAccepted = (allGrnItems || [])
+            .filter(g => g.po_item_id === poItem.id)
+            .reduce((sum, g) => sum + g.quantity_accepted, 0);
+            
+         // Added 0 for null safety
+         if (totalAccepted < (Number(poItem.quantity) || 0)) {
+             isFullyReceived = false;
+             break;
+         }
+      }
+
+      const newStatus = isFullyReceived ? "fully_received" : "partially_received";
 
       // Update PO status based on new workflow
       await supabase
         .from("purchase_orders")
         .update({ status: newStatus })
         .eq("id", selectedPO.id);
+
+      // Trigger 3-way matching + ML scoring asynchronously
+      try {
+        fetch('http://localhost:3001/api/validate/grn-match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            grn_id: createdGrn.id, 
+            po_id: selectedPO.id, 
+            org_id: orgData.org_id,
+            invoice_id: selectedInvoiceId
+          })
+        }).catch(err => console.error("Validation API error:", err));
+      } catch(e) {
+        console.error("Failed to trigger validation API", e);
+      }
     }
 
     setLoading(false);
@@ -161,6 +232,8 @@ function GRNForm() {
     } else {
       setToast({ open: true, msg: "GRN created successfully!", severity: "success" });
       setPoId("");
+      setSelectedInvoiceId("");
+      setInvoices([]);
       setGrnNumber("");
       setGrnDate("");
     }
@@ -228,6 +301,27 @@ function GRNForm() {
                 </MenuItem>
               ))}
             </TextField>
+            <TextField
+              select
+              fullWidth
+              label="Select Invoice"
+              margin="normal"
+              required
+              value={selectedInvoiceId}
+              onChange={(e) => handleInvoiceSelect(e.target.value)}
+              disabled={!poId || invoices.length === 0}
+              sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+            >
+              {invoices.length === 0 ? (
+                <MenuItem value="" disabled>No invoices found for this PO</MenuItem>
+              ) : (
+                invoices.map((inv) => (
+                  <MenuItem key={inv.id} value={inv.id}>
+                    {inv.invoice_number} ({inv.status})
+                  </MenuItem>
+                ))
+              )}
+            </TextField>
             <TextField fullWidth label="GRN Number" margin="normal" required value={grnNumber} onChange={(e) => setGrnNumber(e.target.value)} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
             <TextField fullWidth type="date" label="GRN Date" margin="normal" required InputLabelProps={{ shrink: true }} value={grnDate} onChange={(e) => setGrnDate(e.target.value)} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
 
@@ -269,13 +363,9 @@ function GRNForm() {
                             />
                           </TableCell>
                           <TableCell>
-                            <TextField
-                              size="small"
-                              type="number"
-                              inputProps={{ min: 0 }}
-                              value={item.rejected_qty}
-                              onChange={(e) => handleItemQtyChange(item.id, "rejected_qty", e.target.value)}
-                            />
+                            <Typography fontWeight={600} color={item.rejected_qty > 0 ? "error.main" : "text.secondary"} sx={{ ml: 1 }}>
+                              {item.rejected_qty}
+                            </Typography>
                           </TableCell>
                         </TableRow>
                       ))}
