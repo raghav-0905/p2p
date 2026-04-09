@@ -9,6 +9,7 @@ import Payments from "./pages/Payments";
 import VendorProfile from "./pages/VendorProfile";
 import ContractsPerformance from "./pages/ContractsPerformance";
 import Messaging from "./pages/Messaging";
+import GRNManagement from "./pages/GRNManagement";
 
 import { useEffect, useState } from "react";
 import { supabase, isSupabaseConfigured } from "./lib/supabase";
@@ -181,6 +182,7 @@ export default function App() {
           <Route element={session ? <VendorLayout /> : <Navigate to="/login" />}>
             <Route path="/dashboard" element={<VendorDashboard />} />
             <Route path="/purchase-orders" element={<POManagement />} />
+            <Route path="/grns" element={<GRNManagement />} />
             <Route path="/invoices" element={<InvoiceManagement />} />
             <Route path="/payments" element={<Payments />} />
             <Route path="/profile" element={<VendorProfile />} />

@@ -361,3 +361,42 @@ export async function updatePOStatus(poId, newStatus) {
 
   return { error };
 }
+
+/**
+ * Fetch Goods Receipt Notes (GRNs) associated with authorized purchase orders.
+ */
+export async function fetchVendorGrns(poIds) {
+  if (!poIds || poIds.length === 0) return [];
+  
+  const { data, error } = await supabase
+    .from("grns")
+    .select("*, purchase_orders(po_number)")
+    .in("po_id", poIds)
+    .order("grn_date", { ascending: false });
+    
+  if (error) {
+    console.error("[vendor-frontend] fetchVendorGrns ERROR:", error);
+    return [];
+  }
+  
+  return data || [];
+}
+
+/**
+ * Fetch specific GRN items
+ */
+export async function fetchVendorGrnItems(grnId) {
+  if (!grnId) return [];
+  
+  const { data, error } = await supabase
+    .from("grn_items")
+    .select("*")
+    .eq("grn_id", grnId);
+    
+  if (error) {
+    console.error(`[vendor-frontend] fetchVendorGrnItems(${grnId}) ERROR:`, error);
+    return [];
+  }
+  
+  return data || [];
+}
