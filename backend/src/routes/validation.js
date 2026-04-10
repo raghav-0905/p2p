@@ -1,5 +1,5 @@
 import express from "express";
-import { perform3WayMatch } from "../services/matchingService.js";
+import { perform3WayMatch, validatePOPaymentClosure } from "../services/matchingService.js";
 import { scoreInvoice } from "../services/scoringService.js";
 import { supabase } from "../supabaseClient.js";
 
@@ -98,6 +98,21 @@ router.get("/assessments/:orgId", async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
+});
+
+/**
+ * Validates if a PO can be closed based on payments
+ */
+router.post("/validate-po-closure", async (req, res) => {
+  const { po_id } = req.body;
+  if (!po_id) {
+    return res.status(400).json({ error: "po_id is required" });
+  }
+
+  const result = await validatePOPaymentClosure(po_id);
+  
+  if (!result.success) return res.status(500).json(result);
+  res.json(result);
 });
 
 export default router;

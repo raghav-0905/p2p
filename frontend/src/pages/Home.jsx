@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
 import {
   AppBar,
   Toolbar,
@@ -17,6 +19,15 @@ import AccountTreeIcon from '@mui/icons-material/AccountTree';
 
 function Home() {
   const navigate = useNavigate();
+  const { user, orgUser, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && user) {
+      if (orgUser) {
+        navigate(orgUser.role === "org_admin" ? "/admin" : "/user", { replace: true });
+      }
+    }
+  }, [user, orgUser, loading, navigate]);
 
   const containerVariants = {
     hidden: { opacity: 0 },

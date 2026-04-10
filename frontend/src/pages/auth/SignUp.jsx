@@ -11,6 +11,8 @@ import {
 import { motion } from "framer-motion";
 import { supabase } from "../../lib/supabase";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { useEffect } from "react";
 
 export default function SignUp() {
   const [orgCode, setOrgCode] = useState("");
@@ -18,6 +20,17 @@ export default function SignUp() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { user, orgUser, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (orgUser) {
+        navigate(orgUser.role === "org_admin" ? "/admin" : "/user", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
+    }
+  }, [user, orgUser, authLoading, navigate]);
 
   const handleSignUp = async (e) => {
     e.preventDefault();
