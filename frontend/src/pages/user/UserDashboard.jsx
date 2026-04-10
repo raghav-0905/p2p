@@ -54,6 +54,7 @@ import MetricTile from "../../components/dashboard/MetricTile";
 import SectionCard from "../../components/dashboard/SectionCard";
 import StatusPill from "../../components/dashboard/StatusPill";
 import DetailDrawer from "../../components/dashboard/DetailDrawer";
+import PRTracker from "../../components/dashboard/PRTracker";
 
 const monthKey = (dateValue) => {
   const d = dateValue ? new Date(dateValue) : null;
@@ -84,6 +85,7 @@ export default function UserDashboard() {
   const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [grns, setGrns] = useState([]);
   const [requisitions, setRequisitions] = useState([]);
+  const [purchaseRequests, setPurchaseRequests] = useState([]);
   const [payments, setPayments] = useState([]);
   const [fraudAssessments, setFraudAssessments] = useState([]);
   const [vendorProfiles, setVendorProfiles] = useState([]);
@@ -136,11 +138,12 @@ export default function UserDashboard() {
         .single();
       if (orgData?.legal_name) setOrgName(orgData.legal_name);
 
-      const [inv, po, grnData, req, pay, fraud, vends] = await Promise.all([
+      const [inv, po, grnData, req, prData, pay, fraud, vends] = await Promise.all([
         safeOrgQuery(orgId, "invoices"),
         safeOrgQuery(orgId, "purchase_orders"),
         safeOrgQuery(orgId, "grns"),
         safeOrgQuery(orgId, "requisitions"),
+        safeOrgQuery(orgId, "purchase_requests"),
         safeOrgQuery(orgId, "payments"),
         safeOrgQuery(orgId, "fraud_assessments"),
         supabase.from("vendors").select("*") // Fetch all for lookups
@@ -150,6 +153,7 @@ export default function UserDashboard() {
       setPurchaseOrders(po);
       setGrns(grnData);
       setRequisitions(req);
+      setPurchaseRequests(prData);
       setPayments(pay);
       setFraudAssessments(fraud);
       setVendorProfiles(vends.data || []);
@@ -169,14 +173,16 @@ export default function UserDashboard() {
     const mtdSpend = invoices
       .filter((x) => {
         const d = new Date(x.invoice_date || x.created_at);
-        return !Number.isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        const isPaid = (x.status || "").toLowerCase() === "paid";
+        return isPaid && !Number.isNaN(d.getTime()) && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
       })
       .reduce((s, x) => s + toAmt(x.total_amount), 0);
 
     const ytdSpend = invoices
       .filter((x) => {
         const d = new Date(x.invoice_date || x.created_at);
-        return !Number.isNaN(d.getTime()) && d.getFullYear() === currentYear;
+        const isPaid = (x.status || "").toLowerCase() === "paid";
+        return isPaid && !Number.isNaN(d.getTime()) && d.getFullYear() === currentYear;
       })
       .reduce((s, x) => s + toAmt(x.total_amount), 0);
 
@@ -347,7 +353,7 @@ export default function UserDashboard() {
             </ListItemButton>
             <ListItemButton onClick={() => { navigate("/purchase-requests"); setDrawerOpen(false); }}>
               <ListItemIcon><AssignmentTurnedInIcon /></ListItemIcon>
-              <ListItemText primary="Purchase Requests" />
+              <ListItemText primary="Purchase Requests (Create)" />
             </ListItemButton>
             <ListItemButton onClick={() => { navigate("/grn"); setDrawerOpen(false); }}>
               <ListItemIcon><InventoryIcon /></ListItemIcon>
@@ -393,6 +399,20 @@ export default function UserDashboard() {
           <Grid item xs={12} sm={6} md={4} lg={2}><MetricTile loading={loading} label="Invoices Pending" value={kpis.invoicesPending} onClick={() => openDetail("Pending Invoices", "Invoices requiring action", invoices.filter((x) => ["submitted", "on_hold", "pending", "pending_approval"].includes((x.status || "").toLowerCase())), [{ key: "invoice_number", label: "Invoice" }, { key: "status", label: "Status" }, { key: "total_amount", label: "Amount" }], ["Invoice Queue"])} /></Grid>
           <Grid item xs={12} sm={6} md={4} lg={2}><MetricTile loading={loading} label="Payments Due / Savings" value={`${kpis.paymentsDue} / ₹${kpis.savings.toLocaleString("en-IN")}`} onClick={() => openDetail("Payments Due & Savings", "Upcoming dues and realized savings", payments, [{ key: "id", label: "Payment ID" }, { key: "status", label: "Status" }, { key: "due_date", label: "Due Date" }], ["Cash Flow"])} /></Grid>
         </Grid>
+
+        <Box mb={3}>
+          <SectionCard title="Purchase Request Tracker" subtitle="Live tracking of your PR lifecycle (PR -> PO -> GRN -> Invoice -> Payment)">
+            {loading ? <CircularProgress /> : (
+              <PRTracker 
+                prs={purchaseRequests} 
+                purchaseOrders={purchaseOrders} 
+                grns={grns} 
+                invoices={invoices} 
+                payments={payments} 
+              />
+            )}
+          </SectionCard>
+        </Box>
 
         <Grid container spacing={2}>
           <Grid item xs={12} lg={7}>

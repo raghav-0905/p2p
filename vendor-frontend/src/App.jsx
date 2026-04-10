@@ -5,7 +5,7 @@ import VendorLayout from "./layouts/VendorLayout";
 import VendorDashboard from "./pages/VendorDashboard";
 import POManagement from "./pages/POManagement";
 import InvoiceManagement from "./pages/InvoiceManagement";
-import PRManagement from "./pages/PRManagement";
+import PurchaseRequestReview from "./pages/PurchaseRequestReview";
 import Payments from "./pages/Payments";
 import VendorProfile from "./pages/VendorProfile";
 import ContractsPerformance from "./pages/ContractsPerformance";
@@ -183,7 +183,7 @@ export default function App() {
           <Route element={session ? <VendorLayout /> : <Navigate to="/login" />}>
             <Route path="/dashboard" element={<VendorDashboard />} />
             <Route path="/purchase-orders" element={<POManagement />} />
-            <Route path="/purchase-requests" element={<PRManagement />} />
+            <Route path="/purchase-requests" element={<PurchaseRequestReview />} />
             <Route path="/grns" element={<GRNManagement />} />
             <Route path="/invoices" element={<InvoiceManagement />} />
             <Route path="/payments" element={<Payments />} />

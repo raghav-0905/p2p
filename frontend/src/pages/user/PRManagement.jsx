@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../../lib/supabase";
 import {
   Box,
   Typography,
@@ -34,14 +34,14 @@ import AddCircleOutlinedIcon from "@mui/icons-material/AddCircleOutlined";
 export default function PRManagement() {
   const [prs, setPrs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [vendorData, setVendorData] = useState(null);
-  const [availableOrgs, setAvailableOrgs] = useState([]);
+  const [orgData, setOrgData] = useState(null);
+  const [availableVendors, setAvailableVendors] = useState([]);
 
   // Create dialog
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [prNumber, setPrNumber] = useState("");
-  const [selectedOrgId, setSelectedOrgId] = useState("");
+  const [selectedVendorId, setSelectedVendorId] = useState("");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState([
     { id: Date.now(), item_name: "", quantity: 1, unit_price: 0, gst_rate: 0 },
@@ -56,78 +56,86 @@ export default function PRManagement() {
   const [snack, setSnack] = useState({ open: false, message: "", severity: "success" });
 
   useEffect(() => {
-    fetchPRs();
+    fetchPRsAndVendors();
 
     const channel = supabase
-      .channel("vendor-pr-channel")
+      .channel("buyer-pr-channel")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "purchase_requests" },
-        () => fetchPRs()
+        () => fetchPRsAndVendors()
       )
       .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
 
-  const fetchPRs = async () => {
+  const fetchPRsAndVendors = async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: vendorList } = await supabase
-        .from("vendors")
-        .select("*")
+      const { data: orgUser } = await supabase
+        .from("organization_users")
+        .select("org_id")
         .eq("user_id", user.id)
-        .limit(1);
+        .single();
 
-      const vendor = vendorList?.[0];
-      if (!vendor) return;
-      setVendorData(vendor);
+      if (!orgUser?.org_id) return;
+      setOrgData({ id: orgUser.org_id });
 
-      // Fetch PRs for this vendor
+      // Fetch PRs for this organization
       const { data: prData } = await supabase
         .from("purchase_requests")
         .select("*")
-        .eq("vendor_id", vendor.id)
+        .eq("org_id", orgUser.org_id)
         .order("created_at", { ascending: false });
 
-      // Enrich with org names
-      const orgIds = [...new Set((prData || []).map((p) => p.org_id).filter(Boolean))];
-      let orgMap = {};
-      if (orgIds.length > 0) {
-        const { data: orgs } = await supabase
-          .from("organizations")
-          .select("id, legal_name")
-          .in("id", orgIds);
-        orgMap = Object.fromEntries((orgs || []).map((o) => [o.id, o.legal_name]));
+      // Enrich with vendor company_names
+      const vendorIds = [...new Set((prData || []).map((p) => p.vendor_id).filter(Boolean))];
+      let vendorMap = {};
+
+      if (vendorIds.length > 0) {
+        const { data: vendors } = await supabase
+          .from("vendors")
+          .select("id, company_name")
+          .in("id", vendorIds);
+        vendorMap = Object.fromEntries((vendors || []).map((v) => [v.id, v.company_name]));
       }
 
       setPrs(
         (prData || []).map((pr) => ({
           ...pr,
-          org_name: orgMap[pr.org_id] || "Unknown",
+          vendor_name: vendorMap[pr.vendor_id] || "Unknown",
         }))
       );
 
-      // Fetch linked orgs for the create dialog
-      const linkedOrgIds = new Set();
-      if (vendor.org_id) linkedOrgIds.add(vendor.org_id);
+      // Fetch available vendors linked to this org
+      const { data: legacyVendors } = await supabase
+        .from("vendors")
+        .select("id, company_name")
+        .eq("org_id", orgUser.org_id);
 
-      const { data: links } = await supabase
+      const merged = [...(legacyVendors || [])];
+      
+      // Look for vendor_org_links if necessary, but legacy logic mostly covers it in small DBs
+      const { data: linkedVendors } = await supabase
         .from("vendor_org_links")
-        .select("org_id")
-        .eq("vendor_id", vendor.id);
-      (links || []).forEach((l) => { if (l.org_id) linkedOrgIds.add(l.org_id); });
+        .select("vendor_id, vendors(id, company_name)")
+        .eq("org_id", orgUser.org_id);
 
-      if (linkedOrgIds.size > 0) {
-        const { data: orgData } = await supabase
-          .from("organizations")
-          .select("id, legal_name")
-          .in("id", [...linkedOrgIds]);
-        setAvailableOrgs(orgData || []);
+      if (linkedVendors) {
+        linkedVendors.forEach((link) => {
+          if (link.vendors && !merged.find((v) => v.id === link.vendors.id)) {
+            merged.push(link.vendors);
+          }
+        });
       }
+
+      const unique = Array.from(new Map(merged.map((v) => [v.id, v])).values());
+      setAvailableVendors(unique);
+
     } catch (error) {
       console.error(error);
     } finally {
@@ -179,8 +187,8 @@ export default function PRManagement() {
   };
 
   const handleCreateSubmit = async () => {
-    if (!prNumber || !selectedOrgId) {
-      setSnack({ open: true, message: "PR Number and Organization are required.", severity: "warning" });
+    if (!prNumber || !selectedVendorId) {
+      setSnack({ open: true, message: "PR Number and Vendor are required.", severity: "warning" });
       return;
     }
     if (lineItems.some((i) => !i.item_name)) {
@@ -197,8 +205,8 @@ export default function PRManagement() {
         .insert([
           {
             pr_number: prNumber,
-            vendor_id: vendorData.id,
-            org_id: selectedOrgId,
+            org_id: orgData.id,
+            vendor_id: selectedVendorId,
             status: "pending",
             notes: notes || null,
             total_taxable_value: totals.taxable,
@@ -233,15 +241,15 @@ export default function PRManagement() {
 
       setCreateOpen(false);
       setPrNumber("");
-      setSelectedOrgId("");
+      setSelectedVendorId("");
       setNotes("");
       setLineItems([{ id: Date.now(), item_name: "", quantity: 1, unit_price: 0, gst_rate: 0 }]);
       setSnack({
         open: true,
-        message: `Purchase Request ${prNumber} submitted successfully.`,
+        message: `Purchase Request ${prNumber} created successfully.`,
         severity: "success",
       });
-      fetchPRs();
+      fetchPRsAndVendors();
     } catch (error) {
       console.error(error);
       setSnack({
@@ -289,7 +297,7 @@ export default function PRManagement() {
             Purchase Requests
           </Typography>
           <Typography color="text.secondary">
-            Create and submit purchase requests to your buyer organizations.
+            Create Purchase Requests for vendors to review.
           </Typography>
         </Box>
         <Button
@@ -314,7 +322,7 @@ export default function PRManagement() {
               <TableHead sx={{ bgcolor: "#f8fafc" }}>
                 <TableRow>
                   <TableCell sx={{ fontWeight: 700 }}>PR Number</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Organization</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Vendor</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Amount (₹)</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
@@ -332,7 +340,7 @@ export default function PRManagement() {
                   prs.map((pr) => (
                     <TableRow key={pr.id} hover>
                       <TableCell sx={{ fontWeight: 600 }}>{pr.pr_number}</TableCell>
-                      <TableCell>{pr.org_name}</TableCell>
+                      <TableCell>{pr.vendor_name}</TableCell>
                       <TableCell>
                         {new Date(pr.created_at).toLocaleDateString("en-IN", {
                           day: "2-digit",
@@ -380,8 +388,8 @@ export default function PRManagement() {
         <DialogTitle sx={{ fontWeight: 700 }}>Create Purchase Request</DialogTitle>
         <DialogContent>
           <Alert severity="info" sx={{ mb: 2 }}>
-            Specify items, unit prices, and GST rates. The buyer organization must accept this PR
-            before creating Purchase Orders against it.
+            Specify items and prices. The vendor must accept this PR
+            before you can convert it into a Purchase Order.
           </Alert>
 
           <Stack spacing={2} mt={1}>
@@ -397,17 +405,17 @@ export default function PRManagement() {
               select
               fullWidth
               required
-              label="Target Organization"
-              value={selectedOrgId}
-              onChange={(e) => setSelectedOrgId(e.target.value)}
-              disabled={availableOrgs.length === 0}
+              label="Target Vendor"
+              value={selectedVendorId}
+              onChange={(e) => setSelectedVendorId(e.target.value)}
+              disabled={availableVendors.length === 0}
             >
-              {availableOrgs.length === 0 ? (
-                <MenuItem value="" disabled>No linked organizations</MenuItem>
+              {availableVendors.length === 0 ? (
+                <MenuItem value="" disabled>No registered vendors found</MenuItem>
               ) : (
-                availableOrgs.map((org) => (
-                  <MenuItem key={org.id} value={org.id}>
-                    {org.legal_name}
+                availableVendors.map((vendor) => (
+                  <MenuItem key={vendor.id} value={vendor.id}>
+                    {vendor.company_name}
                   </MenuItem>
                 ))
               )}
@@ -552,7 +560,7 @@ export default function PRManagement() {
           <Button
             onClick={handleCreateSubmit}
             variant="contained"
-            disabled={creating || !prNumber || !selectedOrgId}
+            disabled={creating || !prNumber || !selectedVendorId}
           >
             {creating ? <CircularProgress size={20} color="inherit" /> : "Submit PR"}
           </Button>
@@ -567,7 +575,7 @@ export default function PRManagement() {
         <DialogContent>
           <Box display="flex" gap={3} mb={2} flexWrap="wrap">
             <Typography variant="body2" color="text.secondary">
-              <strong>Organization:</strong> {selectedPR?.org_name ?? "—"}
+              <strong>Vendor:</strong> {selectedPR?.vendor_name ?? "—"}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               <strong>Status:</strong>{" "}

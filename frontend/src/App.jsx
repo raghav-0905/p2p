@@ -13,7 +13,7 @@ import GRNForm from "./pages/user/GRNForm";
 import AnalyticsDashboard from "./pages/user/AnalyticsDashboard";
 import ProcurementOverview from "./pages/user/ProcurementOverview";
 import InvoiceReview from "./pages/user/InvoiceReview";
-import PurchaseRequestReview from "./pages/user/PurchaseRequestReview";
+import PRManagement from "./pages/user/PRManagement";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -101,7 +101,7 @@ export default function App() {
         path="/purchase-requests"
         element={
           <ProtectedRoute allow={["finance", "procurement"]}>
-            <PurchaseRequestReview />
+            <PRManagement />
           </ProtectedRoute>
         }
       />

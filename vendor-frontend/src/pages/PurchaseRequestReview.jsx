@@ -1,13 +1,10 @@
 import { useState, useEffect } from "react";
-import { supabase } from "../../lib/supabase";
+import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import {
   Box,
   Typography,
   Paper,
-  AppBar,
-  Toolbar,
-  IconButton,
   CircularProgress,
   Table,
   TableBody,
@@ -27,8 +24,7 @@ import {
   MenuItem,
   Stack,
 } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
@@ -63,7 +59,7 @@ export default function PurchaseRequestReview() {
     fetchPRs();
 
     const channel = supabase
-      .channel("customer-pr-channel")
+      .channel("vendor-pr-review-channel")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "purchase_requests" },
@@ -80,40 +76,40 @@ export default function PurchaseRequestReview() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: orgUser } = await supabase
-        .from("organization_users")
-        .select("org_id")
+      const { data: vendorList } = await supabase
+        .from("vendors")
+        .select("*")
         .eq("user_id", user.id)
-        .single();
+        .limit(1);
 
-      if (!orgUser) return;
-      const orgId = orgUser.org_id;
+      const vendor = vendorList?.[0];
+      if (!vendor) return;
 
-      // Fetch PRs for this org
+      // Fetch PRs for this vendor
       const { data: prData, error: prError } = await supabase
         .from("purchase_requests")
         .select("*")
-        .eq("org_id", orgId)
+        .eq("vendor_id", vendor.id)
         .order("created_at", { ascending: false });
 
       if (prError) throw prError;
 
-      // Enrich with vendor company_name
-      const vendorIds = [...new Set((prData || []).map((p) => p.vendor_id).filter(Boolean))];
-      let vendorMap = {};
-      if (vendorIds.length > 0) {
-        const { data: vendors } = await supabase
-          .from("vendors")
-          .select("id, company_name, contact_email, gstin")
-          .in("id", vendorIds);
-        vendorMap = Object.fromEntries((vendors || []).map((v) => [v.id, v]));
+      // Enrich with organization legal_name
+      const orgIds = [...new Set((prData || []).map((p) => p.org_id).filter(Boolean))];
+      let orgMap = {};
+      if (orgIds.length > 0) {
+        const { data: orgs } = await supabase
+          .from("organizations")
+          .select("id, legal_name")
+          .in("id", orgIds);
+        orgMap = Object.fromEntries((orgs || []).map((o) => [o.id, o]));
       }
 
       setPrs(
         (prData || []).map((pr) => ({
           ...pr,
-          vendor: vendorMap[pr.vendor_id] || null,
-          vendor_name: vendorMap[pr.vendor_id]?.company_name || "Unknown Vendor",
+          org: orgMap[pr.org_id] || null,
+          org_name: orgMap[pr.org_id]?.legal_name || "Unknown Organization",
         }))
       );
     } catch (err) {
@@ -201,34 +197,13 @@ export default function PurchaseRequestReview() {
   const pendingCount = prs.filter((p) => (p.status || "").toLowerCase() === "pending").length;
 
   return (
-    <Box minHeight="100vh" bgcolor="#f8fafc">
-      <AppBar
-        position="static"
-        elevation={0}
-        sx={{
-          background: "#fff",
-          color: "#1e293b",
-          borderBottom: "1px solid #e2e8f0",
-        }}
-      >
-        <Toolbar>
-          <IconButton edge="start" color="inherit" onClick={() => navigate("/user")}>
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography sx={{ ml: 2, fontWeight: 700, color: "#4f46e5" }}>
-            Purchase Requests
-          </Typography>
-        </Toolbar>
-      </AppBar>
-
+    <Box>
       <Box
         component={motion.div}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        p={4}
-        maxWidth="1400px"
-        mx="auto"
+        pt={2}
       >
         <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={1}>
           <Box display="flex" alignItems="center" gap={1.5}>
@@ -236,7 +211,7 @@ export default function PurchaseRequestReview() {
               sx={{
                 p: 1.5,
                 borderRadius: 3,
-                bgcolor: "rgba(79,70,229,0.1)",
+                bgcolor: "rgba(1, 118, 211, 0.1)",
                 display: "inline-flex",
               }}
             >
@@ -247,7 +222,7 @@ export default function PurchaseRequestReview() {
                 Purchase Request Review
               </Typography>
               <Typography color="text.secondary">
-                Review, accept, or reject purchase requests from vendors.
+                Review, accept, or reject incoming purchase requests from your buyers.
                 {pendingCount > 0 && (
                   <Box
                     component="span"
@@ -307,7 +282,7 @@ export default function PurchaseRequestReview() {
                 <TableHead sx={{ bgcolor: "#f1f5f9" }}>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700 }}>PR Number</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>Vendor</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Organization</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Date</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Amount (₹)</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
@@ -324,7 +299,7 @@ export default function PurchaseRequestReview() {
                         <TableCell>
                           <Typography fontWeight={600}>{pr.pr_number}</Typography>
                         </TableCell>
-                        <TableCell>{pr.vendor_name}</TableCell>
+                        <TableCell>{pr.org_name}</TableCell>
                         <TableCell>
                           {new Date(pr.created_at).toLocaleDateString("en-IN", {
                             day: "2-digit",
@@ -395,15 +370,9 @@ export default function PurchaseRequestReview() {
             <DialogContent dividers>
               <Box display="flex" justifyContent="space-between" mb={3} flexWrap="wrap" gap={2}>
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Vendor</Typography>
+                  <Typography variant="body2" color="text.secondary">Organization</Typography>
                   <Typography variant="body1" fontWeight={600}>
-                    {selectedPR.vendor_name}
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography variant="body2" color="text.secondary">GSTIN</Typography>
-                  <Typography variant="body1">
-                    {selectedPR.vendor?.gstin || "—"}
+                    {selectedPR.org_name}
                   </Typography>
                 </Box>
                 <Box>
@@ -422,7 +391,7 @@ export default function PurchaseRequestReview() {
 
               {selectedPR.notes && (
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  <strong>Vendor Notes:</strong> {selectedPR.notes}
+                  <strong>Buyer Notes:</strong> {selectedPR.notes}
                 </Alert>
               )}
 
@@ -552,8 +521,8 @@ export default function PurchaseRequestReview() {
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
             {confirmAction?.newStatus === "accepted"
-              ? `You are about to accept PR ${confirmAction?.prNumber}. The vendor will be notified and you can create Purchase Orders using the agreed items and prices.`
-              : `You are about to reject PR ${confirmAction?.prNumber}. The vendor will be notified. They may revise and resubmit a new PR.`}
+              ? `You are about to accept PR ${confirmAction?.prNumber}. The buyer will be notified and can create Purchase Orders against your prices.`
+              : `You are about to reject PR ${confirmAction?.prNumber}. The buyer will be notified and cannot proceed with this request.`}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -567,7 +536,7 @@ export default function PurchaseRequestReview() {
             disabled={actionLoading}
           >
             {actionLoading ? (
-              <CircularProgress size={18} color="inherit" />
+               <CircularProgress size={18} color="inherit" />
             ) : confirmAction?.newStatus === "accepted" ? (
               "Yes, Accept"
             ) : (
