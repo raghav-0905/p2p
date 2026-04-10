@@ -20,9 +20,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Chip,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import InventoryIcon from "@mui/icons-material/Inventory";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import { motion } from "framer-motion";
 
 function GRNForm() {
@@ -37,6 +39,7 @@ function GRNForm() {
   const [grnDate, setGrnDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, msg: "", severity: "success" });
+  const [prInfo, setPrInfo] = useState(null); // { pr_number } if PO has linked PR
 
   useEffect(() => {
     const fetchPOs = async () => {
@@ -51,7 +54,7 @@ function GRNForm() {
 
       const { data } = await supabase
         .from("purchase_orders")
-        .select("id, po_number, status")
+        .select("id, po_number, status, pr_id")
         .eq("org_id", orgData.org_id)
         .in("status", ["acknowledged", "partially_received"]);
       setPurchaseOrders(data || []);
@@ -70,9 +73,20 @@ function GRNForm() {
     setInvoices([]);
     const po = purchaseOrders.find((p) => p.po_number === value) || null;
     setSelectedPO(po);
+    setPrInfo(null);
     if (!po?.id) {
       setReceivedItems([]);
       return;
+    }
+
+    // Check if this PO has a linked Purchase Request
+    if (po.pr_id) {
+      const { data: prData } = await supabase
+        .from("purchase_requests")
+        .select("pr_number")
+        .eq("id", po.pr_id)
+        .single();
+      if (prData) setPrInfo(prData);
     }
     
     // Fetch associated invoices for this PO
@@ -322,6 +336,20 @@ function GRNForm() {
                 ))
               )}
             </TextField>
+
+            {/* PR Linkage Indicator */}
+            {prInfo && (
+              <Box mt={1} mb={1}>
+                <Chip
+                  icon={<AssignmentTurnedInIcon />}
+                  label={`Linked to Purchase Request: ${prInfo.pr_number}`}
+                  color="success"
+                  variant="outlined"
+                  sx={{ fontWeight: 600 }}
+                />
+              </Box>
+            )}
+
             <TextField fullWidth label="GRN Number" margin="normal" required value={grnNumber} onChange={(e) => setGrnNumber(e.target.value)} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
             <TextField fullWidth type="date" label="GRN Date" margin="normal" required InputLabelProps={{ shrink: true }} value={grnDate} onChange={(e) => setGrnDate(e.target.value)} sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2 } }} />
 

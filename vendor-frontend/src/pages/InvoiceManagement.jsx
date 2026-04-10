@@ -33,6 +33,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import FileUploadIcon from "@mui/icons-material/FileUpload";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 
 export default function InvoiceManagement() {
   const [invoices, setInvoices] = useState([]);
@@ -50,6 +51,7 @@ export default function InvoiceManagement() {
   });
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [statusFilter, setStatusFilter] = useState("all");
+  const [linkedPrNumber, setLinkedPrNumber] = useState(null);
 
   // Detail dialog for invoice line items
   const [detailOpen, setDetailOpen] = useState(false);
@@ -110,6 +112,7 @@ export default function InvoiceManagement() {
           po_number: p.po_number,
           total_amount: p.total_amount,
           org_id: p.org_id,
+          pr_id: p.pr_id || null,
         }))
       );
     } catch (error) {
@@ -251,6 +254,18 @@ export default function InvoiceManagement() {
       })));
     } else {
       setInvoiceItems([]);
+    }
+
+    // Check if this PO has a linked PR
+    if (po.pr_id) {
+      const { data: prData } = await supabase
+        .from("purchase_requests")
+        .select("pr_number")
+        .eq("id", po.pr_id)
+        .single();
+      setLinkedPrNumber(prData?.pr_number || null);
+    } else {
+      setLinkedPrNumber(null);
     }
   };
 
@@ -467,6 +482,18 @@ export default function InvoiceManagement() {
             margin="dense"
             helperText="Auto-calculated from line items below."
           />
+
+          {linkedPrNumber && (
+            <Box mt={1.5}>
+              <Chip
+                icon={<AssignmentTurnedInIcon />}
+                label={`Items sourced from PR: ${linkedPrNumber}`}
+                color="success"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            </Box>
+          )}
 
           {invoiceItems.length > 0 && (
             <Box mt={3}>

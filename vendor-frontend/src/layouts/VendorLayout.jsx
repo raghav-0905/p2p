@@ -30,6 +30,7 @@ import NotificationsIcon from "@mui/icons-material/Notifications";
 import LogoutIcon from "@mui/icons-material/Logout";
 import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import StorefrontIcon from "@mui/icons-material/Storefront";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import { fetchVendorPurchaseOrders, fetchVendorInvoices } from "../lib/vendorPo";
 
 export default function VendorLayout() {
@@ -78,6 +79,7 @@ export default function VendorLayout() {
 
   const navItems = [
     { label: "Dashboard", path: "/dashboard", icon: <DashboardIcon /> },
+    { label: "Purchase Requests", path: "/purchase-requests", icon: <AssignmentTurnedInIcon /> },
     { label: "Purchase Orders", path: "/purchase-orders", icon: <ShoppingCartIcon /> },
     { label: "Deliveries (GRNs)", path: "/grns", icon: <LocalShippingIcon /> },
     { label: "Invoices", path: "/invoices", icon: <ReceiptIcon /> },

@@ -37,6 +37,7 @@ import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import DescriptionIcon from "@mui/icons-material/Description";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import {
   BarChart,
   Bar,
@@ -344,6 +345,10 @@ export default function UserDashboard() {
               <ListItemIcon><ReceiptLongIcon /></ListItemIcon>
               <ListItemText primary="Purchase Orders" />
             </ListItemButton>
+            <ListItemButton onClick={() => { navigate("/purchase-requests"); setDrawerOpen(false); }}>
+              <ListItemIcon><AssignmentTurnedInIcon /></ListItemIcon>
+              <ListItemText primary="Purchase Requests" />
+            </ListItemButton>
             <ListItemButton onClick={() => { navigate("/grn"); setDrawerOpen(false); }}>
               <ListItemIcon><InventoryIcon /></ListItemIcon>
               <ListItemText primary="GRN" />
@@ -508,6 +513,7 @@ export default function UserDashboard() {
             <SectionCard title="Quick Actions" subtitle="Fast path for high-frequency operations">
               <Box display="flex" gap={1.5} flexWrap="wrap">
                 <Button variant="contained" onClick={() => navigate("/purchase-order")}>+ Create PO</Button>
+                <Button variant="outlined" onClick={() => navigate("/purchase-requests")}>Review Purchase Requests</Button>
                 <Button variant="outlined" onClick={() => navigate("/procurement")}>+ Create Requisition</Button>
                 <Button variant="text" startIcon={<WarningAmberIcon />} onClick={() => navigate("/analytics")}>View Fraud Analytics</Button>
               </Box>

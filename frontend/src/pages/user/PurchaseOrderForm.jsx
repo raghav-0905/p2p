@@ -21,12 +21,14 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Chip,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AddCircleOutlineIcon from "@mui/icons-material/AddCircleOutline";
 import StorefrontIcon from "@mui/icons-material/Storefront";
+import AssignmentTurnedInIcon from "@mui/icons-material/AssignmentTurnedIn";
 import { motion } from "framer-motion";
 
 export default function PurchaseOrderForm() {
@@ -42,6 +44,11 @@ export default function PurchaseOrderForm() {
   const [poDate, setPoDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState({ open: false, msg: "", severity: "success" });
+
+  // Purchase Request support
+  const [acceptedPRs, setAcceptedPRs] = useState([]);
+  const [selectedPrId, setSelectedPrId] = useState("");
+  const [prLinked, setPrLinked] = useState(false);
 
   // Dynamic Line Items
   const [lineItems, setLineItems] = useState([
@@ -74,18 +81,69 @@ export default function PurchaseOrderForm() {
     fetchVendors();
   }, []);
 
-  const handleVendorSelect = (companyName) => {
+  const handleVendorSelect = async (companyName) => {
     setSupplierName(companyName);
     const vendor = vendors.find((v) => v.company_name === companyName) || null;
     setSelectedVendor(vendor);
+    setSelectedPrId("");
+    setPrLinked(false);
+    setAcceptedPRs([]);
+    setLineItems([{ id: Date.now(), name: "", qty: 1, rate: 0, taxPercent: 0 }]);
     if (vendor) {
       setSupplierGstin(vendor.gstin || "");
       setSupplierAddress(vendor.address || "");
       setSupplierPhone(vendor.phone || "");
       setSupplierContactEmail(vendor.contact_email || "");
+
+      // Fetch accepted PRs from this vendor for the current org
+      const user = (await supabase.auth.getUser()).data.user;
+      if (user) {
+        const { data: orgData } = await supabase
+          .from("organization_users")
+          .select("org_id")
+          .eq("user_id", user.id)
+          .single();
+        if (orgData?.org_id) {
+          const { data: prData } = await supabase
+            .from("purchase_requests")
+            .select("id, pr_number, total_amount")
+            .eq("vendor_id", vendor.id)
+            .eq("org_id", orgData.org_id)
+            .eq("status", "accepted");
+          setAcceptedPRs(prData || []);
+        }
+      }
     } else {
       setSupplierPhone("");
       setSupplierContactEmail("");
+    }
+  };
+
+  const handlePrSelect = async (prId) => {
+    setSelectedPrId(prId);
+    if (!prId) {
+      setPrLinked(false);
+      setLineItems([{ id: Date.now(), name: "", qty: 1, rate: 0, taxPercent: 0 }]);
+      return;
+    }
+    // Fetch PR items and auto-populate line items
+    const { data: prItems } = await supabase
+      .from("purchase_request_items")
+      .select("*")
+      .eq("pr_id", prId);
+    if (prItems && prItems.length > 0) {
+      setLineItems(
+        prItems.map((item) => ({
+          id: item.id,
+          name: item.item_name,
+          qty: item.quantity,
+          rate: Number(item.unit_price),
+          taxPercent: Number(item.gst_rate),
+        }))
+      );
+      setPrLinked(true);
+    } else {
+      setPrLinked(false);
     }
   };
 
@@ -148,7 +206,8 @@ export default function PurchaseOrderForm() {
         total_gst_value: totals.gst,
         total_amount: totals.amount,
         created_by: user.id,
-        status: "created"
+        status: "created",
+        pr_id: selectedPrId || null,
       },
     ]).select("id").single();
 
@@ -192,6 +251,9 @@ export default function PurchaseOrderForm() {
       setSupplierContactEmail("");
       setPoDate("");
       setLineItems([{ id: Date.now(), name: "", qty: 1, rate: 0, taxPercent: 0 }]);
+      setSelectedPrId("");
+      setPrLinked(false);
+      setAcceptedPRs([]);
     }
   };
 
@@ -294,6 +356,38 @@ export default function PurchaseOrderForm() {
               </Grid>
             </Grid>
 
+            {/* PURCHASE REQUEST SELECTOR */}
+            {selectedVendor && acceptedPRs.length > 0 && (
+              <Box mt={3}>
+                <Box p={2.5} borderRadius={2} border="2px solid #10b981" bgcolor="#ecfdf5" boxShadow="0 4px 12px rgba(16,185,129,0.15)">
+                  <Box display="flex" alignItems="center" gap={1} mb={2}>
+                    <AssignmentTurnedInIcon sx={{ color: '#10b981' }} />
+                    <Typography fontWeight={700} color="#10b981">Link to Accepted Purchase Request</Typography>
+                  </Box>
+                  <TextField
+                    select
+                    fullWidth
+                    label="Select Purchase Request (optional)"
+                    value={selectedPrId}
+                    onChange={(e) => handlePrSelect(e.target.value)}
+                    sx={{ "& .MuiOutlinedInput-root": { borderRadius: 2, background: '#fff' } }}
+                  >
+                    <MenuItem value="">None — enter items manually</MenuItem>
+                    {acceptedPRs.map((pr) => (
+                      <MenuItem key={pr.id} value={pr.id}>
+                        {pr.pr_number} — ₹{Number(pr.total_amount || 0).toLocaleString("en-IN")}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                  {prLinked && (
+                    <Alert severity="info" sx={{ mt: 1.5 }}>
+                      Items, unit prices, and GST rates are populated from the accepted PR. Prices and GST are locked. You may adjust quantities.
+                    </Alert>
+                  )}
+                </Box>
+              </Box>
+            )}
+
             {/* LINE ITEMS SECTION */}
             <Divider sx={{ my: 4 }}><Typography variant="subtitle2" color="text.secondary" textTransform="uppercase">Itemized Requirements</Typography></Divider>
             
@@ -312,16 +406,16 @@ export default function PurchaseOrderForm() {
                   {lineItems.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
-                        <TextField size="small" fullWidth placeholder="E.g., Dell Latitude Laptops" required value={item.name} onChange={(e) => handleItemChange(item.id, 'name', e.target.value)} />
+                        <TextField size="small" fullWidth placeholder="E.g., Dell Latitude Laptops" required value={item.name} onChange={(e) => handleItemChange(item.id, 'name', e.target.value)} InputProps={{ readOnly: prLinked }} />
                       </TableCell>
                       <TableCell>
                         <TextField size="small" type="number" fullWidth required inputProps={{ min: 1 }} value={item.qty} onChange={(e) => handleItemChange(item.id, 'qty', e.target.value)} />
                       </TableCell>
                       <TableCell>
-                        <TextField size="small" type="number" fullWidth required inputProps={{ min: 0 }} value={item.rate} onChange={(e) => handleItemChange(item.id, 'rate', e.target.value)} />
+                        <TextField size="small" type="number" fullWidth required inputProps={{ min: 0 }} value={item.rate} onChange={(e) => handleItemChange(item.id, 'rate', e.target.value)} InputProps={{ readOnly: prLinked }} />
                       </TableCell>
                       <TableCell>
-                        <TextField select size="small" fullWidth value={item.taxPercent} onChange={(e) => handleItemChange(item.id, 'taxPercent', e.target.value)}>
+                        <TextField select size="small" fullWidth value={item.taxPercent} onChange={(e) => handleItemChange(item.id, 'taxPercent', e.target.value)} InputProps={{ readOnly: prLinked }}>
                           {[0, 5, 12, 18, 28].map(tax => (
                             <MenuItem key={tax} value={tax}>{tax}%</MenuItem>
                           ))}
@@ -338,9 +432,23 @@ export default function PurchaseOrderForm() {
               </Table>
             </TableContainer>
 
-            <Button variant="text" startIcon={<AddCircleOutlineIcon />} onClick={addItemRow}>
-              Add Another Item
-            </Button>
+            {!prLinked && (
+              <Button variant="text" startIcon={<AddCircleOutlineIcon />} onClick={addItemRow}>
+                Add Another Item
+              </Button>
+            )}
+
+            {prLinked && (
+              <Box mt={1}>
+                <Chip
+                  icon={<AssignmentTurnedInIcon />}
+                  label={`Linked to PR: ${acceptedPRs.find(p => p.id === selectedPrId)?.pr_number || ''}`}
+                  color="success"
+                  variant="outlined"
+                  sx={{ fontWeight: 600 }}
+                />
+              </Box>
+            )}
 
             {/* FINANCIAL SUMMARY */}
             <Box mt={4} p={3} bgcolor="#f8fafc" borderRadius={2} border="1px solid #e2e8f0" display="flex" flexDirection="column" gap={1} alignItems="flex-end">
