@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Box,
   Button,
@@ -12,14 +12,28 @@ import { motion } from "framer-motion";
 import { supabase } from "../../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import ShieldIcon from '@mui/icons-material/Shield';
+import { useAuth } from "../../context/AuthContext";
 
 export default function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { user, orgUser, loading } = useAuth();
   const navigate = useNavigate();
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  useEffect(() => {
+    if (!loading && user) {
+      if (orgUser) {
+        navigate(orgUser.role === "org_admin" ? "/admin" : "/user", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
+    }
+  }, [user, orgUser, loading, navigate]);
 
   const handleSignIn = async (e) => {
     e.preventDefault();
+    setIsSigningIn(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -28,26 +42,9 @@ export default function SignIn() {
 
     if (error) {
       alert(error.message);
+      setIsSigningIn(false);
       return;
     }
-
-    const userId = data.user.id;
-
-    const { data: orgUser } = await supabase
-      .from("organization_users")
-      .select("role, status")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (!orgUser) {
-      navigate("/", { replace: true });
-      return;
-    }
-
-    navigate(orgUser.role === "org_admin" ? "/admin" : "/user", {
-      replace: true,
-    });
   };
 
   return (
@@ -162,6 +159,7 @@ export default function SignIn() {
                 fullWidth
                 variant="contained"
                 size="large"
+                disabled={isSigningIn}
                 sx={{
                   mt: 4,
                   mb: 2,
@@ -173,7 +171,7 @@ export default function SignIn() {
                   boxShadow: '0 4px 14px 0 rgba(79, 70, 229, 0.39)'
                 }}
               >
-                Sign In
+                {isSigningIn ? "Signing In..." : "Sign In"}
               </Button>
             </motion.div>
             

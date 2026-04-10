@@ -9,9 +9,9 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadUser = async () => {
-      setLoading(true);
+    let mounted = true;
 
+    const loadUser = async () => {
       const {
         data: { session },
         error: sessionError,
@@ -24,8 +24,6 @@ export function AuthProvider({ children }) {
         return;
       }
 
-      setUser(session.user);
-
       const { data, error } = await supabase
         .from("organization_users") // ✅ FIXED
         .select("org_id, role, status")
@@ -33,6 +31,7 @@ export function AuthProvider({ children }) {
         .eq("status", "active")
         .maybeSingle();
 
+      setUser(session.user);
       if (error) {
         console.error("Org user fetch failed:", error);
         setOrgUser(null);
@@ -50,7 +49,10 @@ export function AuthProvider({ children }) {
     });
 
     return () => {
-      listener.subscription.unsubscribe();
+      mounted = false;
+      if (listener?.subscription) {
+        listener.subscription.unsubscribe();
+      }
     };
   }, []);
 

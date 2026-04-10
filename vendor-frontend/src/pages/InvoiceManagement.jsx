@@ -605,9 +605,9 @@ export default function InvoiceManagement() {
                 <TableHead sx={{ bgcolor: "#f8fafc" }}>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 700 }}>Item</TableCell>
-                    <TableCell sx={{ fontWeight: 700 }}>HSN</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Qty</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Unit Price</TableCell>
+
                     <TableCell sx={{ fontWeight: 700 }}>GST %</TableCell>
                     <TableCell sx={{ fontWeight: 700 }}>Total</TableCell>
                   </TableRow>
@@ -627,7 +627,7 @@ export default function InvoiceManagement() {
                     (selectedInvoice?.items || []).map((item, idx) => (
                       <TableRow key={idx}>
                         <TableCell>{item.item_name_snapshot}</TableCell>
-                        <TableCell>{item.hsn_code_snapshot ?? "—"}</TableCell>
+
                         <TableCell>{item.quantity}</TableCell>
                         <TableCell>
                           ₹{Number(item.unit_price || 0).toLocaleString("en-IN")}
