@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  # ── Buyer Frontend ───────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_SUPABASE_URL: https://gairpriyilzwijunhusu.supabase.co
+        VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdhaXJwcml5aWx6d2lqdW5odXN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2ODU3MTIsImV4cCI6MjA4NTI2MTcxMn0.1gY8STqo_pHTo-HeytV9E21nBq-2B8UI1-IQmw21FBs
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+  # ── Vendor Frontend ──────────────────────────────────────
+  vendor-frontend:
+    build:
+      context: ./vendor-frontend
+      args:
+        VITE_SUPABASE_URL: https://gairpriyilzwijunhusu.supabase.co
+        VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdhaXJwcml5aWx6d2lqdW5odXN1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2ODU3MTIsImV4cCI6MjA4NTI2MTcxMn0.1gY8STqo_pHTo-HeytV9E21nBq-2B8UI1-IQmw21FBs
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  # ── Validation Backend ───────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - SUPABASE_URL=https://gairpriyilzwijunhusu.supabase.co
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    restart: unless-stopped
+
+  # ── ML Model Service ────────────────────────────────────
+  model:
+    build:
+      context: ./model
+    ports:
+      - "5000:5000"
+    restart: unless-stopped

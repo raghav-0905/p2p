@@ -1,0 +1,84 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: p2p-ingress
+  namespace: p2p
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /
+spec:
+  rules:
+    # ── Buyer Frontend (default host) ──────────────────────
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-svc
+                port:
+                  number: 80
+
+---
+# Separate Ingress for vendor-frontend on a different path/host
+# Option A: Use a separate ALB for vendor (cleanest)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: p2p-vendor-ingress
+  namespace: p2p
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/group.name: p2p-vendor
+    alb.ingress.kubernetes.io/healthcheck-path: /
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: vendor-frontend-svc
+                port:
+                  number: 80
+
+---
+# Backend & Model exposed as separate NodePort services
+# (accessible internally via ClusterIP, or via port-forward for debugging)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: p2p-api-ingress
+  namespace: p2p
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/group.name: p2p-api
+    alb.ingress.kubernetes.io/healthcheck-path: /
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-svc
+                port:
+                  number: 3001
+          - path: /predict
+            pathType: Prefix
+            backend:
+              service:
+                name: model-svc
+                port:
+                  number: 5000
