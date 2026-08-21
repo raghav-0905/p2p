@@ -115,4 +115,20 @@ router.post("/validate-po-closure", async (req, res) => {
   res.json(result);
 });
 
+/**
+ * Fetch a specific fraud assessment by invoice_id.
+ * This bypasses RLS so the vendor frontend can fetch it.
+ */
+router.get("/fraud-assessment/:invoice_id", async (req, res) => {
+  const { invoice_id } = req.params;
+  const { data, error } = await supabase
+    .from("fraud_assessments")
+    .select("*")
+    .eq("invoice_id", invoice_id)
+    .single();
+
+  if (error) return res.status(404).json({ error: error.message });
+  res.json(data);
+});
+
 export default router;

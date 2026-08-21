@@ -50,6 +50,7 @@ export default function InvoiceManagement() {
     total_amount: "",
   });
   const [invoiceItems, setInvoiceItems] = useState([]);
+  const [fraudData, setFraudData] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [linkedPrNumber, setLinkedPrNumber] = useState(null);
 
@@ -195,11 +196,24 @@ export default function InvoiceManagement() {
     setSelectedInvoice({ ...inv, items: [] });
     setDetailOpen(true);
     setDetailLoading(true);
+    setFraudData(null);
+
     const { data: items } = await supabase
       .from("invoice_items")
       .select("*")
       .eq("invoice_id", inv.id);
     setSelectedInvoice({ ...inv, items: items || [] });
+
+    try {
+      const res = await fetch("http://localhost:3001/api/validate/fraud-assessment/" + inv.id);
+      if (res.ok) {
+        const assessmentData = await res.json();
+        setFraudData(assessmentData);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch fraud assessment", e);
+    }
+
     setDetailLoading(false);
   };
 
@@ -621,6 +635,38 @@ export default function InvoiceManagement() {
               {Number(selectedInvoice?.total_amount || 0).toLocaleString("en-IN")}
             </Typography>
           </Box>
+
+          {fraudData && fraudData.match_status === "mismatch" && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" fontWeight="bold">Invoice Dispute / Mismatch Detected</Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                The buyer has flagged this invoice for review due to a discrepancy between your invoice and their goods receipt.
+              </Typography>
+              {fraudData.match_details && (
+                <Box mt={1}>
+                  {!fraudData.match_details.amount_match && (
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                      • <strong>Amount Mismatch:</strong> Discrepancy of ₹{fraudData.match_details.amount_diff?.toLocaleString("en-IN")} between PO and Invoice.
+                    </Typography>
+                  )}
+                  {!fraudData.match_details.qty_match && fraudData.match_details.mismatched_items && (
+                    <>
+                      <Typography variant="body2" sx={{ mb: 0.5 }}>• <strong>Quantity Mismatches:</strong></Typography>
+                      <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                        {fraudData.match_details.mismatched_items.map((item, idx) => (
+                          <li key={idx}>
+                            <Typography variant="body2">
+                              <strong>{item.item}</strong> - Ordered: {item.po_qty} | Accepted by Buyer (GRN): {item.grn_qty} | Billed by you: {item.inv_qty}
+                            </Typography>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </Box>
+              )}
+            </Alert>
+          )}
 
           {detailLoading ? (
             <Box display="flex" justifyContent="center" py={4}>

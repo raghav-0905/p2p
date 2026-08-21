@@ -190,3 +190,7 @@ If you encounter issues, open a GitHub issue or reach out to the maintainers.
 ---
 
 **Built with ❤️ using React + Supabase**
+
+
+## ?? AI Agent Instructions
+If you are an AI agent, please read [.planning/INDEX.md](./.planning/INDEX.md) before making any architectural or backend changes.

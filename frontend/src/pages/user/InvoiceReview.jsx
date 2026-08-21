@@ -45,6 +45,7 @@ export default function InvoiceReview() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState([]);
+  const [fraudData, setFraudData] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [snack, setSnack] = useState({ open: false, message: "", severity: "success" });
@@ -128,18 +129,31 @@ export default function InvoiceReview() {
     setSelectedInvoice(invoice);
     setDetailOpen(true);
     setDetailLoading(true);
+    setFraudData(null); // Reset
 
     try {
-      const { data, error } = await supabase
+      // Fetch Items
+      const { data: itemsData, error: itemsError } = await supabase
         .from("invoice_items")
         .select("*")
         .eq("invoice_id", invoice.id);
       
-      if (error) throw error;
-      setInvoiceItems(data || []);
+      if (itemsError) throw itemsError;
+      setInvoiceItems(itemsData || []);
+
+      // Fetch Match/Fraud details
+      const { data: assessmentData, error: assessmentError } = await supabase
+        .from("fraud_assessments")
+        .select("*")
+        .eq("invoice_id", invoice.id)
+        .single();
+      
+      if (!assessmentError && assessmentData) {
+        setFraudData(assessmentData);
+      }
     } catch (err) {
       console.error(err);
-      setInvoiceItems([]);
+      if (invoiceItems.length === 0) setInvoiceItems([]);
     } finally {
       setDetailLoading(false);
     }
@@ -295,6 +309,35 @@ export default function InvoiceReview() {
                   </Typography>
                 </Box>
               </Box>
+
+              {fraudData && fraudData.match_status === "mismatch" && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" fontWeight="bold">3-Way Match Failure Detected</Typography>
+                  {fraudData.match_details && (
+                    <Box mt={1}>
+                      {!fraudData.match_details.amount_match && (
+                        <Typography variant="body2" sx={{ mb: 0.5 }}>
+                          • <strong>Amount Mismatch:</strong> Discrepancy of ₹{fraudData.match_details.amount_diff?.toLocaleString("en-IN")} between PO and Invoice.
+                        </Typography>
+                      )}
+                      {!fraudData.match_details.qty_match && fraudData.match_details.mismatched_items && (
+                        <>
+                          <Typography variant="body2" sx={{ mb: 0.5 }}>• <strong>Quantity Mismatches:</strong></Typography>
+                          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                            {fraudData.match_details.mismatched_items.map((item, idx) => (
+                              <li key={idx}>
+                                <Typography variant="body2">
+                                  <strong>{item.item}</strong> - Ordered: {item.po_qty} | Received (GRN): {item.grn_qty} | Billed (Invoice): {item.inv_qty}
+                                </Typography>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </Box>
+                  )}
+                </Alert>
+              )}
 
               <Typography variant="h6" mb={2} fontSize="1rem">Line Items</Typography>
               {detailLoading ? (

@@ -42,3 +42,17 @@ services:
     ports:
       - "5000:5000"
     restart: unless-stopped
+
+  # ── Embedding Polling Service ───────────────────────────
+  embedding-service:
+    build:
+      context: ./embedding-service
+    ports:
+      - "4000:4000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - PINECONE_INDEX_NAME=${PINECONE_INDEX_NAME}
+      - PORT=4000
+    restart: unless-stopped
