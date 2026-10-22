@@ -6,6 +6,7 @@ import SignUp from "./pages/auth/SignUp";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import UserDashboard from "./pages/user/UserDashboard";
+import AgentFleetPage from "./pages/agent-fleet/AgentFleetPage";
 
 import PurchaseOrderForm from "./pages/user/PurchaseOrderForm";
 import GRNForm from "./pages/user/GRNForm";
@@ -26,7 +27,7 @@ export default function App() {
       <Route path="/signin" element={<SignIn />} />
       <Route path="/signup" element={<SignUp />} />
       <Route path="/dashboard" element={<UserDashboard />} />
-      <Route path="/agent-fleet" element={<UserDashboard />} />
+      <Route path="/agent-fleet" element={<AgentFleetPage />} />
 
       {/* Admin Dashboard */}
       <Route
