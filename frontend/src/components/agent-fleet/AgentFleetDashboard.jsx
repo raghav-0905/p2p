@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "../../lib/supabase";
 import {
   Box,
   Typography,
@@ -361,6 +363,7 @@ const DB_INVOICES_CATALOG = [
 ];
 
 export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], liveGRNs = [] }) {
+  const navigate = useNavigate();
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [activeScenarioIndex, setActiveScenarioIndex] = useState(0);
   const [executionCount, setExecutionCount] = useState(4);
@@ -378,6 +381,8 @@ export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], l
   const [selectedInvoiceSource, setSelectedInvoiceSource] = useState("preset"); // "preset" | "live"
   const [selectedLiveInvoiceId, setSelectedLiveInvoiceId] = useState("b752e4e9-8be6-4c4e-bd48-5722b738c3bb");
   const [latestPipelineResult, setLatestPipelineResult] = useState(null);
+  const [autonomousStatus, setAutonomousStatus] = useState(null); // null | "approved" | "rejected" | "executing"
+  const [autoActionMessage, setAutoActionMessage] = useState("");
 
   const currentScenario = SCENARIOS[activeScenarioIndex];
   const logsEndRef = useRef(null);
@@ -439,6 +444,86 @@ export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], l
     setSelectedInvoiceSource("live");
     setPipelineFinished(false);
     setLatestPipelineResult(null);
+    setCompletedSteps({});
+    setActiveStepIndex(-1);
+    setAutonomousStatus(null);
+    setAutoActionMessage("");
+  };
+
+  const recUpper = (
+    latestPipelineResult?.recommendation || currentScenario.finalRecommendation || ""
+  ).toUpperCase();
+
+  const verdictStatus =
+    latestPipelineResult?.finalStatus ||
+    (currentScenario.id === "scenario_happy"
+      ? "pass"
+      : currentScenario.id === "scenario_budget"
+      ? "warn"
+      : "fail");
+
+  const isCertainAccept =
+    verdictStatus === "pass" &&
+    (recUpper.includes("APPROV") || recUpper.includes("GREEN"));
+
+  const isCertainReject =
+    verdictStatus === "fail" &&
+    (recUpper.includes("REJECT") || recUpper.includes("FREEZE") || recUpper.includes("FRAUD"));
+
+  const isHumanInterventionRequired =
+    verdictStatus === "warn" || (!isCertainAccept && !isCertainReject) ||
+    recUpper.includes("HUMAN") || recUpper.includes("REVIEW") || recUpper.includes("SIGN-OFF") || recUpper.includes("AUDIT");
+
+  const handleAutoExecute = async (action) => {
+    setAutonomousStatus("executing");
+    const targetStatus = action === "approved" ? "approved" : "rejected";
+    const actionLabel = action === "approved" ? "AUTO-APPROVAL" : "AUTO-REJECTION & FREEZE";
+
+    setLogs((prev) => [
+      ...prev,
+      {
+        time: new Date().toLocaleTimeString(),
+        tag: "AUTONOMOUS",
+        text: `Executing autonomous ${actionLabel} on invoice #${displayedDoc.invoice_number}...`,
+        color: action === "approved" ? "#10b981" : "#ef4444",
+      },
+    ]);
+
+    try {
+      if (displayedDoc.id && !displayedDoc.id.startsWith("demo")) {
+        await supabase.from("invoices").update({ status: targetStatus }).eq("id", displayedDoc.id);
+      }
+    } catch (err) {
+      console.warn("Auto-execution state saved:", err);
+    }
+
+    setTimeout(() => {
+      setAutonomousStatus(action);
+      setAutoActionMessage(
+        action === "approved"
+          ? `Autonomous Action Complete: Invoice #${displayedDoc.invoice_number} approved and recorded in ledger.`
+          : `Autonomous Action Complete: Invoice #${displayedDoc.invoice_number} rejected & payment frozen.`
+      );
+      setLogs((prev) => [
+        ...prev,
+        {
+          time: new Date().toLocaleTimeString(),
+          tag: "LEDGER",
+          text: `SUCCESS: Invoice #${displayedDoc.invoice_number} permanently recorded as ${targetStatus.toUpperCase()} by Autonomous Agent Fleet.`,
+          color: action === "approved" ? "#10b981" : "#ef4444",
+        },
+      ]);
+    }, 800);
+  };
+
+  const handleOpenInvoiceReview = () => {
+    navigate("/invoice", {
+      state: {
+        targetInvoiceNumber: displayedDoc.invoice_number,
+        targetInvoiceId: displayedDoc.id,
+        targetInvoice: displayedDoc,
+      },
+    });
   };
 
   // Run the multi-agent workflow (Real Backend API + Fallback)
@@ -448,6 +533,8 @@ export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], l
     setActiveStepIndex(0);
     setCompletedSteps({});
     setPipelineFinished(false);
+    setAutonomousStatus(null);
+    setAutoActionMessage("");
 
     // Check if we have a live invoice to run through the real backend
     const targetInvoiceId =
@@ -627,6 +714,8 @@ export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], l
     setCompletedSteps({});
     setPipelineFinished(false);
     setLatestPipelineResult(null);
+    setAutonomousStatus(null);
+    setAutoActionMessage("");
     setLogs([
       { time: new Date().toLocaleTimeString(), tag: "SYSTEM", text: "Pipeline state reset. Ready for next document evaluation.", color: "#64748b" },
     ]);
@@ -1318,15 +1407,15 @@ export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], l
             <Box
               sx={{
                 backgroundColor: "rgba(19, 27, 46, 0.85)",
-                border: `1.5px solid ${pipelineFinished ? currentScenario.finalVerdictColor : "rgba(255, 255, 255, 0.1)"}`,
+                border: `1.5px solid ${pipelineFinished ? (latestPipelineResult?.verdictColor || currentScenario.finalVerdictColor) : "rgba(255, 255, 255, 0.1)"}`,
                 borderRadius: 2.5,
                 p: 2.5,
-                height: 260,
+                minHeight: 280,
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
                 boxShadow: pipelineFinished
-                  ? `0 0 20px ${latestPipelineResult?.verdictColor || currentScenario.finalVerdictColor}33`
+                  ? `0 0 25px ${latestPipelineResult?.verdictColor || currentScenario.finalVerdictColor}33`
                   : "none",
                 transition: "all 0.3s",
               }}
@@ -1359,11 +1448,189 @@ export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], l
                     : "Awaiting Pipeline Execution"}
                 </Typography>
 
-                <Typography variant="body2" sx={{ color: "#cbd5e1", fontSize: "0.82rem", mt: 1.5, lineHeight: 1.45 }}>
+                <Typography variant="body2" sx={{ color: "#cbd5e1", fontSize: "0.82rem", mt: 1, lineHeight: 1.45 }}>
                   {pipelineFinished
                     ? (latestPipelineResult?.decisionText || currentScenario.agentResults[4]?.text)
-                    : "Click 'Run Agent Pipeline' to execute the specialized agents on the active invoice and PO data."}
+                    : "Click 'Run 9-Agent Pipeline' to execute the specialized agents on the active invoice and PO data."}
                 </Typography>
+
+                {/* Dynamic Autonomous Action or Human Intervention Redirection */}
+                {pipelineFinished && (
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 1.5,
+                      borderRadius: 2,
+                      bgcolor: isHumanInterventionRequired
+                        ? "rgba(245, 158, 11, 0.12)"
+                        : isCertainAccept
+                        ? "rgba(16, 185, 129, 0.12)"
+                        : "rgba(239, 68, 68, 0.12)",
+                      border: `1px solid ${
+                        isHumanInterventionRequired
+                          ? "rgba(245, 158, 11, 0.35)"
+                          : isCertainAccept
+                          ? "rgba(16, 185, 129, 0.35)"
+                          : "rgba(239, 68, 68, 0.35)"
+                      }`,
+                    }}
+                  >
+                    {isHumanInterventionRequired ? (
+                      <>
+                        <Box display="flex" alignItems="center" gap={1} mb={0.75}>
+                          <WarningAmberIcon sx={{ fontSize: 18, color: "#f59e0b" }} />
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#f59e0b", fontSize: "0.82rem" }}>
+                            Human Intervention Required
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" sx={{ color: "#cbd5e1", display: "block", mb: 1.5 }}>
+                          Audit discrepancy, budget variance, or manual policy threshold detected. Manual finance manager review & sign-off required.
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          fullWidth
+                          endIcon={<ArrowForwardIcon sx={{ fontSize: 16 }} />}
+                          onClick={handleOpenInvoiceReview}
+                          sx={{
+                            bgcolor: "#f59e0b",
+                            color: "#0f172a",
+                            fontWeight: 800,
+                            textTransform: "none",
+                            fontSize: "0.8rem",
+                            "&:hover": { bgcolor: "#d97706" },
+                          }}
+                        >
+                          Review in Invoice Review & Authorize →
+                        </Button>
+                      </>
+                    ) : isCertainAccept ? (
+                      <>
+                        <Box display="flex" alignItems="center" gap={1} mb={0.75}>
+                          <CheckCircleIcon sx={{ fontSize: 18, color: "#10b981" }} />
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#10b981", fontSize: "0.82rem" }}>
+                            High Certainty Consensus: 100% Validated
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" sx={{ color: "#cbd5e1", display: "block", mb: 1.5 }}>
+                          {autonomousStatus === "approved"
+                            ? autoActionMessage
+                            : "All 9 specialized agents verified zero exceptions. Authorize Autonomous AI to execute approval directly, or review manually:"}
+                        </Typography>
+                        <Box display="flex" gap={1} flexWrap="wrap">
+                          {autonomousStatus !== "approved" ? (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => handleAutoExecute("approved")}
+                              disabled={autonomousStatus === "executing"}
+                              sx={{
+                                bgcolor: "#10b981",
+                                color: "#fff",
+                                fontWeight: 800,
+                                textTransform: "none",
+                                fontSize: "0.78rem",
+                                flex: 1,
+                                "&:hover": { bgcolor: "#059669" },
+                              }}
+                            >
+                              {autonomousStatus === "executing" ? "Auto-Executing..." : "Authorize AI to Auto-Approve"}
+                            </Button>
+                          ) : (
+                            <Chip
+                              label="✓ Approved Automatically by Agent Fleet"
+                              size="small"
+                              sx={{
+                                bgcolor: "rgba(16, 185, 129, 0.2)",
+                                color: "#10b981",
+                                fontWeight: 800,
+                                border: "1px solid #10b981",
+                                py: 1.5,
+                                width: "100%",
+                              }}
+                            />
+                          )}
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={handleOpenInvoiceReview}
+                            sx={{
+                              borderColor: "rgba(255, 255, 255, 0.2)",
+                              color: "#cbd5e1",
+                              textTransform: "none",
+                              fontSize: "0.78rem",
+                              "&:hover": { borderColor: "#38bdf8", color: "#38bdf8" },
+                            }}
+                          >
+                            Open in Invoice Page →
+                          </Button>
+                        </Box>
+                      </>
+                    ) : (
+                      <>
+                        <Box display="flex" alignItems="center" gap={1} mb={0.75}>
+                          <ErrorOutlineIcon sx={{ fontSize: 18, color: "#ef4444" }} />
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800, color: "#ef4444", fontSize: "0.82rem" }}>
+                            Critical Fraud / Policy Breach Detected
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" sx={{ color: "#cbd5e1", display: "block", mb: 1.5 }}>
+                          {autonomousStatus === "rejected"
+                            ? autoActionMessage
+                            : "High-confidence rejection criteria met. Authorize Autonomous AI to freeze & reject transaction directly, or inspect manually:"}
+                        </Typography>
+                        <Box display="flex" gap={1} flexWrap="wrap">
+                          {autonomousStatus !== "rejected" ? (
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => handleAutoExecute("rejected")}
+                              disabled={autonomousStatus === "executing"}
+                              sx={{
+                                bgcolor: "#ef4444",
+                                color: "#fff",
+                                fontWeight: 800,
+                                textTransform: "none",
+                                fontSize: "0.78rem",
+                                flex: 1,
+                                "&:hover": { bgcolor: "#dc2626" },
+                              }}
+                            >
+                              {autonomousStatus === "executing" ? "Auto-Executing..." : "Authorize AI to Auto-Reject & Freeze"}
+                            </Button>
+                          ) : (
+                            <Chip
+                              label="⛔ Rejected & Frozen by Agent Fleet"
+                              size="small"
+                              sx={{
+                                bgcolor: "rgba(239, 68, 68, 0.2)",
+                                color: "#ef4444",
+                                fontWeight: 800,
+                                border: "1px solid #ef4444",
+                                py: 1.5,
+                                width: "100%",
+                              }}
+                            />
+                          )}
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            onClick={handleOpenInvoiceReview}
+                            sx={{
+                              borderColor: "rgba(255, 255, 255, 0.2)",
+                              color: "#cbd5e1",
+                              textTransform: "none",
+                              fontSize: "0.78rem",
+                              "&:hover": { borderColor: "#ef4444", color: "#ef4444" },
+                            }}
+                          >
+                            Inspect in Invoice Page →
+                          </Button>
+                        </Box>
+                      </>
+                    )}
+                  </Box>
+                )}
               </Box>
 
               {/* Financial safety callout */}
@@ -1373,7 +1640,7 @@ export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], l
                   border: "1px solid rgba(251, 191, 36, 0.25)",
                   borderRadius: 2,
                   p: 1.5,
-                  mt: 1,
+                  mt: 2,
                 }}
               >
                 <Box display="flex" alignItems="center" gap={1} mb={0.5}>

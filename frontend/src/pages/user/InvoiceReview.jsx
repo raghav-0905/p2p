@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Box,
   Typography,
@@ -38,6 +38,7 @@ const STATUS_COLORS = {
 
 export default function InvoiceReview() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState([]);
   const [pos, setPos] = useState([]);
@@ -53,6 +54,70 @@ export default function InvoiceReview() {
   useEffect(() => {
     fetchInvoices();
   }, []);
+
+  // Automatically open target invoice if redirected from Agent Fleet Dashboard
+  useEffect(() => {
+    if (!loading && (location.state?.targetInvoiceNumber || location.state?.targetInvoice)) {
+      const targetNum = location.state.targetInvoiceNumber;
+      const targetId = location.state.targetInvoiceId;
+      const match = invoices.find(
+        (i) => (targetNum && i.invoice_number === targetNum) || (targetId && i.id === targetId)
+      );
+
+      if (match) {
+        openDetails(match);
+      } else if (location.state?.targetInvoice) {
+        const target = location.state.targetInvoice;
+        const mockInv = {
+          id: target.id || "preview-target-id",
+          invoice_number: target.invoice_number || targetNum || "INV-TEST-2528",
+          supplier_name: target.supplier_name || "Test Supplier Inc",
+          invoice_date: target.invoice_date || new Date().toISOString().split("T")[0],
+          po_id: target.po_id || "PO-TEST-5368",
+          total_amount: target.total_amount || 1180,
+          status: target.badge?.toLowerCase().includes("approve") ? "approved" : "under_review",
+        };
+        setSelectedInvoice(mockInv);
+        setInvoiceItems([
+          {
+            id: "line-1",
+            item_name_snapshot: "M8 Bolts",
+            quantity: 500,
+            unit_price: 2.5,
+            taxable_value: 1250,
+            gst_amount: 225,
+            gst_rate_snapshot: 18,
+            total_amount: 1475,
+          },
+          {
+            id: "line-2",
+            item_name_snapshot: "Steel Plates",
+            quantity: 20,
+            unit_price: 50,
+            taxable_value: 1000,
+            gst_amount: 180,
+            gst_rate_snapshot: 18,
+            total_amount: 1180,
+          },
+        ]);
+        if (
+          target.badge?.toLowerCase().includes("anomaly") ||
+          target.badge?.toLowerCase().includes("fraud") ||
+          target.badge?.toLowerCase().includes("alert")
+        ) {
+          setFraudData({
+            match_status: "mismatch",
+            match_details: {
+              amount_match: false,
+              amount_diff: 75000,
+              qty_match: true,
+            },
+          });
+        }
+        setDetailOpen(true);
+      }
+    }
+  }, [loading, invoices, location.state]);
 
   const fetchInvoices = async () => {
     setLoading(true);
