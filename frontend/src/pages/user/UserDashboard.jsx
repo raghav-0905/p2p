@@ -111,9 +111,13 @@ export default function UserDashboard() {
   }, []);
 
   async function safeOrgQuery(orgId, table, select = "*") {
-    const { data, error } = await supabase.from(table).select(select).eq("org_id", orgId);
-    if (error) return [];
-    return data || [];
+    try {
+      const { data, error } = await supabase.from(table).select(select).eq("org_id", orgId);
+      if (error) return [];
+      return data || [];
+    } catch {
+      return [];
+    }
   }
 
   async function bootstrap() {
@@ -139,13 +143,12 @@ export default function UserDashboard() {
         .single();
       if (orgData?.legal_name) setOrgName(orgData.legal_name);
 
-      const [inv, po, grnData, req, prData, pay, fraud, vends] = await Promise.all([
+      const [inv, po, grnData, prData, payRes, fraud, vends] = await Promise.all([
         safeOrgQuery(orgId, "invoices"),
         safeOrgQuery(orgId, "purchase_orders"),
         safeOrgQuery(orgId, "grns"),
-        safeOrgQuery(orgId, "requisitions"),
         safeOrgQuery(orgId, "purchase_requests"),
-        safeOrgQuery(orgId, "payments"),
+        supabase.from("payments").select("*"), // payments schema has no org_id column
         safeOrgQuery(orgId, "fraud_assessments"),
         supabase.from("vendors").select("*") // Fetch all for lookups
       ]);
@@ -153,9 +156,9 @@ export default function UserDashboard() {
       setInvoices(inv);
       setPurchaseOrders(po);
       setGrns(grnData);
-      setRequisitions(req);
+      setRequisitions(prData); // Requisitions are represented by purchase_requests in schema
       setPurchaseRequests(prData);
-      setPayments(pay);
+      setPayments(payRes.data || []);
       setFraudAssessments(fraud);
       setVendorProfiles(vends.data || []);
     } catch (error) {
