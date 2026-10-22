@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import validationRoutes from "./routes/validation.js";
+import agentRoutes from "./routes/agents.js";
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ app.get("/", (_req, res) => {
 
 // Routes
 app.use("/api/validate", validationRoutes);
+app.use("/api/agents", agentRoutes);
 
 // Start server
 app.listen(PORT, () => {

@@ -55,6 +55,9 @@ import SectionCard from "../../components/dashboard/SectionCard";
 import StatusPill from "../../components/dashboard/StatusPill";
 import DetailDrawer from "../../components/dashboard/DetailDrawer";
 import PRTracker from "../../components/dashboard/PRTracker";
+import AgentFleetDashboard from "../../components/agent-fleet/AgentFleetDashboard";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
+import HubIcon from "@mui/icons-material/Hub";
 
 const monthKey = (dateValue) => {
   const d = dateValue ? new Date(dateValue) : null;
@@ -91,6 +94,7 @@ export default function UserDashboard() {
   const [vendorProfiles, setVendorProfiles] = useState([]);
   const [detailPayload, setDetailPayload] = useState(null);
   const [invoiceTab, setInvoiceTab] = useState(0);
+  const [dashboardTab, setDashboardTab] = useState(0); // 0: Agent Fleet & Workflow, 1: Operations, 2: Unified
 
   useEffect(() => {
     bootstrap();
@@ -316,19 +320,44 @@ export default function UserDashboard() {
     setDetailPayload({ title, subtitle, rows, columns, chips });
   };
 
+  const isDarkMode = dashboardTab === 0 || dashboardTab === 2;
+
   return (
-    <Box minHeight="100vh" bgcolor="#f8fafc">
-      <AppBar position="static" elevation={0} sx={{ background: "#fff", color: "#0f172a", borderBottom: "1px solid #e2e8f0" }}>
+    <Box minHeight="100vh" bgcolor={isDarkMode ? "#060913" : "#f8fafc"} sx={{ transition: "background-color 0.3s" }}>
+      <AppBar
+        position="static"
+        elevation={0}
+        sx={{
+          background: isDarkMode ? "#0b0f19" : "#fff",
+          color: isDarkMode ? "#f8fafc" : "#0f172a",
+          borderBottom: isDarkMode ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid #e2e8f0",
+          transition: "all 0.3s",
+        }}
+      >
         <Toolbar>
           <IconButton edge="start" color="inherit" onClick={() => setDrawerOpen(true)}>
             <MenuIcon />
           </IconButton>
-          <Typography sx={{ flexGrow: 1, fontWeight: 700, color: "#4f46e5", ml: 1 }}>
-            P2P Executive Dashboard
+          <Typography sx={{ flexGrow: 1, fontWeight: 800, color: isDarkMode ? "#818cf8" : "#4f46e5", ml: 1, letterSpacing: "-0.01em" }}>
+            P2P Autonomous Agent Command Center
           </Typography>
-          <Button variant="outlined" color="error" size="small" onClick={handleLogout}>
-            Logout
-          </Button>
+          <Box display="flex" alignItems="center" gap={1.5}>
+            <Chip
+              label="Fleet MVP Active"
+              size="small"
+              sx={{
+                bgcolor: "rgba(16, 185, 129, 0.15)",
+                color: "#10b981",
+                border: "1px solid rgba(16, 185, 129, 0.3)",
+                fontWeight: 700,
+                fontSize: "0.72rem",
+                display: { xs: "none", sm: "inline-flex" },
+              }}
+            />
+            <Button variant="outlined" color="error" size="small" onClick={handleLogout}>
+              Logout
+            </Button>
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -383,15 +412,58 @@ export default function UserDashboard() {
         </Box>
       </Drawer>
 
-      <Box p={3} maxWidth="1500px" mx="auto">
-        <Typography variant="h4" fontWeight={800} mb={0.5}>
-          Procurement & Finance Overview
-        </Typography>
-        <Typography color="text.secondary" mb={3}>
-          Instant visibility into spend, approvals, invoicing, payments, and fraud-related exceptions.
-        </Typography>
+      <Box p={{ xs: 2, md: 3.5 }} maxWidth="1540px" mx="auto">
+        {/* Navigation Tabs between Agent Fleet & Operations */}
+        <Box sx={{ borderBottom: 1, borderColor: isDarkMode ? "rgba(255, 255, 255, 0.08)" : "divider", mb: 3 }}>
+          <Tabs
+            value={dashboardTab}
+            onChange={(e, v) => setDashboardTab(v)}
+            textColor="primary"
+            indicatorColor="primary"
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              "& .MuiTab-root": {
+                color: isDarkMode ? "#94a3b8" : "text.secondary",
+                fontWeight: 700,
+                fontSize: "0.95rem",
+                textTransform: "none",
+                minHeight: 48,
+                "&.Mui-selected": {
+                  color: isDarkMode ? "#818cf8" : "#4f46e5",
+                },
+              },
+              "& .MuiTabs-indicator": {
+                backgroundColor: isDarkMode ? "#818cf8" : "#4f46e5",
+                height: 3,
+                borderRadius: "3px 3px 0 0",
+              },
+            }}
+          >
+            <Tab icon={<SmartToyIcon sx={{ mr: 1, fontSize: 20 }} />} iconPosition="start" label="Specialized Agent Fleet & Workflow" />
+            <Tab icon={<BarChartIcon sx={{ mr: 1, fontSize: 20 }} />} iconPosition="start" label="Procurement & Finance Operations" />
+            <Tab icon={<HubIcon sx={{ mr: 1, fontSize: 20 }} />} iconPosition="start" label="Unified Command View" />
+          </Tabs>
+        </Box>
 
-        <Grid container spacing={2} mb={2}>
+        {/* VIEW 1: AGENT FLEET & INTERACTIVE WORKFLOW SHOWCASE */}
+        {(dashboardTab === 0 || dashboardTab === 2) && (
+          <Box mb={dashboardTab === 2 ? 5 : 0}>
+            <AgentFleetDashboard liveInvoices={invoices} livePOs={purchaseOrders} liveGRNs={grns} />
+          </Box>
+        )}
+
+        {/* VIEW 2: TRADITIONAL OPERATIONS OVERVIEW */}
+        {(dashboardTab === 1 || dashboardTab === 2) && (
+          <Box>
+            <Typography variant="h4" fontWeight={800} mb={0.5} sx={{ color: isDarkMode ? "#f8fafc" : "#0f172a" }}>
+              Procurement & Finance Overview
+            </Typography>
+            <Typography color={isDarkMode ? "#94a3b8" : "text.secondary"} mb={3}>
+              Instant visibility into spend, approvals, invoicing, payments, and fraud-related exceptions.
+            </Typography>
+
+            <Grid container spacing={2} mb={2}>
           <Grid item xs={12} sm={6} md={4} lg={2}><MetricTile loading={loading} label="Total Spend (MTD)" value={`₹${kpis.mtdSpend.toLocaleString("en-IN")}`} onClick={() => openDetail("Total Spend (MTD)", "Invoices in current month", invoices.filter((x) => monthKey(x.invoice_date || x.created_at) === monthKey(new Date())), [{ key: "invoice_number", label: "Invoice" }, { key: "supplier_name", label: "Supplier" }, { key: "total_amount", label: "Amount" }], ["MTD", "Invoices"])} /></Grid>
           <Grid item xs={12} sm={6} md={4} lg={2}><MetricTile loading={loading} label="Total Spend (YTD)" value={`₹${kpis.ytdSpend.toLocaleString("en-IN")}`} onClick={() => openDetail("Total Spend (YTD)", "Invoices in current year", invoices.filter((x) => new Date(x.invoice_date || x.created_at).getFullYear() === new Date().getFullYear()), [{ key: "invoice_number", label: "Invoice" }, { key: "supplier_name", label: "Supplier" }, { key: "total_amount", label: "Amount" }], ["YTD", "Invoices"])} /></Grid>
           <Grid item xs={12} sm={6} md={4} lg={2}><MetricTile loading={loading} label="Total Purchase Orders" value={kpis.totalPOs} onClick={() => openDetail("Purchase Orders", "All purchase orders", purchaseOrders, [{ key: "id", label: "PO ID" }, { key: "status", label: "Status" }, { key: "total_amount", label: "Amount" }], ["PO"])} /></Grid>
@@ -597,6 +669,8 @@ export default function UserDashboard() {
           </Grid>
         </Grid>
       </Box>
+    )}
+    </Box>
       {loading && (
         <Box position="fixed" right={16} bottom={16}>
           <Button variant="outlined" startIcon={<CircularProgress size={14} />}>

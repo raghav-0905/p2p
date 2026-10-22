@@ -16,6 +16,7 @@ import { motion } from "framer-motion";
 import ShieldIcon from '@mui/icons-material/Shield';
 import SpeedIcon from '@mui/icons-material/Speed';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
 
 function Home() {
   const navigate = useNavigate();
@@ -106,7 +107,24 @@ function Home() {
             <Button color="inherit" sx={{ fontWeight: 600 }}>Docs</Button>
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Button
+              variant="contained"
+              startIcon={<SmartToyIcon />}
+              sx={{
+                fontWeight: 700,
+                background: "linear-gradient(135deg, #1e1b4b 0%, #4338ca 100%)",
+                borderRadius: '20px',
+                px: 2.5,
+                color: "#e0e7ff",
+                boxShadow: '0 4px 15px rgba(99,102,241,0.35)',
+                textTransform: 'none',
+                border: '1px solid rgba(129, 140, 248, 0.4)'
+              }}
+              onClick={() => navigate("/agent-fleet")}
+            >
+              Agent Fleet Dashboard
+            </Button>
             <Button
               variant="text"
               color="primary"
@@ -201,15 +219,35 @@ function Home() {
 
         {/* CTA BUTTONS */}
         <motion.div variants={itemVariants}>
-          <Box display="flex" gap={3}>
+          <Box display="flex" gap={2.5} flexWrap="wrap" justifyContent="center">
+            <Button
+              size="large"
+              variant="contained"
+              onClick={() => navigate("/agent-fleet")}
+              startIcon={<SmartToyIcon />}
+              sx={{
+                px: 3.5,
+                py: 1.5,
+                fontSize: '1.05rem',
+                fontWeight: 700,
+                borderRadius: '30px',
+                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                boxShadow: '0 10px 25px rgba(99, 102, 241, 0.4)',
+                textTransform: 'none',
+                "&:hover": { background: "linear-gradient(135deg, #4338ca 0%, #6d28d9 100%)" }
+              }}
+            >
+              Launch Agent Fleet & Workflow
+            </Button>
+
             <Button
               size="large"
               variant="contained"
               onClick={() => navigate("/signup")}
               sx={{
-                px: 4,
+                px: 3.5,
                 py: 1.5,
-                fontSize: '1.1rem',
+                fontSize: '1.05rem',
                 fontWeight: 600,
                 borderRadius: '30px',
                 boxShadow: '0 10px 20px rgba(79, 70, 229, 0.3)',
