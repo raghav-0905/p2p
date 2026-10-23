@@ -33,6 +33,23 @@ spec:
                 secretKeyRef:
                   name: backend-secrets
                   key: SUPABASE_SERVICE_ROLE_KEY
+            - name: ML_API_URL
+              value: "http://model-svc:5000"
+            - name: LLM_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: LLM_PROVIDER
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: LLM_API_KEY
+            - name: LLM_MODEL
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: LLM_MODEL
           resources:
             requests:
               cpu: 100m

@@ -561,7 +561,7 @@ export default function AgentFleetDashboard({ liveInvoices = [], livePOs = [], l
           { time: new Date().toLocaleTimeString(), tag: "ORCHESTRATOR", text: `Dispatching verification tasks to backend agent orchestrator...`, color: "#93c5fd" },
         ]);
 
-        const response = await fetch("http://localhost:3001/api/agents/run-pipeline", {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/agents/run-pipeline`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ invoice_id: targetInvoiceId }),

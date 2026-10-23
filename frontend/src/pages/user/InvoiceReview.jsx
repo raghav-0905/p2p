@@ -245,7 +245,7 @@ export default function InvoiceReview() {
 
       // 3. Robust verification via validation layer
       try {
-        const response = await fetch('http://localhost:3001/api/validate/validate-po-closure', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/validate/validate-po-closure`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ po_id: invoice.po_id })

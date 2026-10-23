@@ -225,7 +225,7 @@ function GRNForm() {
 
       // Trigger 3-way matching + ML scoring asynchronously
       try {
-        fetch('http://localhost:3001/api/validate/grn-match', {
+        fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/validate/grn-match`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 

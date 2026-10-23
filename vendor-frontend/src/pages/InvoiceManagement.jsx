@@ -205,7 +205,7 @@ export default function InvoiceManagement() {
     setSelectedInvoice({ ...inv, items: items || [] });
 
     try {
-      const res = await fetch("http://localhost:3001/api/validate/fraud-assessment/" + inv.id);
+      const res = await fetch(`${import.meta.env.VITE_API_URL || "http://localhost:3001"}/api/validate/fraud-assessment/` + inv.id);
       if (res.ok) {
         const assessmentData = await res.json();
         setFraudData(assessmentData);
